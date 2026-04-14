@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-kuda-navy text-white antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-kuda-navylt border border-kuda-border rounded-xl p-5;
+  }
+  .card-sm {
+    @apply bg-kuda-navylt border border-kuda-border rounded-lg p-4;
+  }
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4;
+  }
+  .metric-value {
+    @apply font-mono text-2xl font-semibold;
+  }
+  .metric-label {
+    @apply text-xs text-slate-400 mt-0.5;
+  }
+  .pill {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .pill-safe    { @apply bg-kuda-teal/10 text-kuda-teal; }
+  .pill-watch   { @apply bg-yellow-400/10 text-yellow-400; }
+  .pill-warning { @apply bg-amber-500/10 text-amber-500; }
+  .pill-breach  { @apply bg-red-500/10 text-red-400; }
+  .input-dark {
+    @apply bg-kuda-navymid border border-kuda-border rounded-lg px-3 py-2 text-sm
+           text-white placeholder-slate-500 focus:outline-none focus:border-kuda-teal
+           focus:ring-1 focus:ring-kuda-teal/30 transition w-full font-mono;
+  }
+  .btn-primary {
+    @apply flex items-center gap-2 bg-kuda-teal hover:bg-kuda-teallt text-kuda-navy
+           font-semibold text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer;
+  }
+  .btn-ghost {
+    @apply flex items-center gap-2 border border-kuda-border hover:border-slate-500
+           text-slate-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer;
+  }
+}
+
+/* Recharts custom overrides */
+.recharts-tooltip-wrapper { @apply !z-50; }
+.recharts-cartesian-axis-tick-value { fill: #94a3b8 !important; font-size: 11px; }
+.recharts-legend-item-text { color: #94a3b8 !important; font-size: 12px; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1E3A5F; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2D4F7C; }
+
+/* Print */
+@media print {
+  body { background: white !important; color: black !important; }
+  .no-print { display: none !important; }
+  .card { border: 1px solid #e2e8f0 !important; background: white !important; }
+}

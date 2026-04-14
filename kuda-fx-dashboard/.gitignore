@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+api/local.settings.json
+api/__pycache__/
+api/.python_packages/
+*.pyc
+.DS_Store
