@@ -8,9 +8,20 @@ import azure.functions as func
 import json
 import logging
 import io
+import os
 from datetime import datetime, date
 import pandas as pd
 import numpy as np
+
+# Azure Blob Storage — only imported when connection string is available
+try:
+    from azure.storage.blob import BlobServiceClient
+    BLOB_AVAILABLE = True
+except ImportError:
+    BLOB_AVAILABLE = False
+
+STORAGE_CONN_STR   = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
+HISTORY_CONTAINER  = "fx-history"
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
@@ -82,6 +93,9 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
             "settled_today":     _calc_settled_today(df),
         }
 
+        # ── Save snapshot to blob storage (if configured) ─────────────────────
+        _save_snapshot(mtm_date, result)
+
         return func.HttpResponse(
             json.dumps(result, default=_json_serial),
             mimetype="application/json",
@@ -105,6 +119,123 @@ def process_options(req: func.HttpRequest) -> func.HttpResponse:
             "Access-Control-Allow-Headers": "Content-Type",
         },
     )
+
+
+@app.route(route="history", methods=["GET"])
+def history(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Returns the last N days of daily snapshots from blob storage.
+    Query params:
+      - days : number of days to return (default 90)
+    """
+    try:
+        days = int(req.params.get("days", 90))
+        snapshots = _load_snapshots(days)
+        return func.HttpResponse(
+            json.dumps({"snapshots": snapshots}, default=_json_serial),
+            mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except Exception as e:
+        logging.exception("Error in history()")
+        return _error(str(e), status_code=500)
+
+
+@app.route(route="history", methods=["OPTIONS"])
+def history_options(req: func.HttpRequest) -> func.HttpResponse:
+    return func.HttpResponse(
+        "",
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin":  "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
+# ─── Blob Storage Helpers ─────────────────────────────────────────────────────
+
+def _get_blob_client():
+    """Return a BlobServiceClient or None if not configured."""
+    if not BLOB_AVAILABLE or not STORAGE_CONN_STR:
+        return None
+    try:
+        return BlobServiceClient.from_connection_string(STORAGE_CONN_STR)
+    except Exception:
+        logging.warning("Could not connect to blob storage — history disabled")
+        return None
+
+
+def _save_snapshot(mtm_date: str, result: dict):
+    """Save today's dashboard result as a JSON blob keyed by date."""
+    client = _get_blob_client()
+    if not client:
+        return
+    try:
+        container = client.get_container_client(HISTORY_CONTAINER)
+        # Create container if it doesn't exist
+        try:
+            container.create_container()
+        except Exception:
+            pass  # Already exists
+
+        # Build a compact summary for the history record
+        snapshot = {
+            "date":            mtm_date,
+            "mtm_zar":         result["csa_monitor"]["current_mtm_kuda_zar"],
+            "status":          result["csa_monitor"]["status"],
+            "buffer_zar":      result["csa_monitor"]["buffer_zar"],
+            "trigger_rate":    result["csa_monitor"]["trigger_rate"],
+            "spot_usd_zar":    result["meta"]["spot_usd_zar"],
+            "total_trades":    result["meta"]["total_trades"],
+            "net_nominal_usd": result["facility_limits"]["net_nominal_usd"],
+            "long_nominal_usd":result["facility_limits"]["long_nominal_usd"],
+            "nominal_util_pct":result["facility_limits"]["nominal_utilisation_pct"],
+            "settled_count":   result["settled_today"]["count"],
+            "settled_mtm":     result["settled_today"]["total_mtm"],
+            # Full result stored for drill-down
+            "full": result,
+        }
+
+        blob_name = f"{mtm_date}.json"
+        container.upload_blob(
+            name=blob_name,
+            data=json.dumps(snapshot, default=_json_serial),
+            overwrite=True,
+            content_settings={"content_type": "application/json"},
+        )
+        logging.info(f"Snapshot saved: {blob_name}")
+    except Exception as e:
+        logging.warning(f"Failed to save snapshot: {e}")
+
+
+def _load_snapshots(days: int = 90) -> list:
+    """Load the last N daily snapshots from blob storage, sorted newest first."""
+    client = _get_blob_client()
+    if not client:
+        return []
+    try:
+        container = client.get_container_client(HISTORY_CONTAINER)
+        blobs = list(container.list_blobs())
+        # Sort by name (YYYY-MM-DD.json) descending and take the last `days`
+        blobs.sort(key=lambda b: b.name, reverse=True)
+        blobs = blobs[:days]
+
+        snapshots = []
+        for blob in blobs:
+            try:
+                data = container.download_blob(blob.name).readall()
+                snap = json.loads(data)
+                # Return summary only (exclude full result to keep response small)
+                snapshots.append({k: v for k, v in snap.items() if k != "full"})
+            except Exception as e:
+                logging.warning(f"Could not load snapshot {blob.name}: {e}")
+
+        return snapshots
+    except Exception as e:
+        logging.warning(f"Failed to load snapshots: {e}")
+        return []
 
 
 # ─── Data Loading ──────────────────────────────────────────────────────────────

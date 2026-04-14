@@ -8,6 +8,7 @@ import ScenarioAnalysis from './components/ScenarioAnalysis.jsx'
 import TopClientsTable  from './components/TopClientsTable.jsx'
 import MaturityProfile  from './components/MaturityProfile.jsx'
 import SettledTrades    from './components/SettledTrades.jsx'
+import HistoryChart     from './components/HistoryChart.jsx'
 
 export default function App() {
   const [dashData, setDashData] = useState(null)
@@ -55,6 +56,7 @@ export default function App() {
         <TopClientsTable data={top_clients}       />
         <MaturityProfile data={maturity_profile}  />
         <SettledTrades   data={settled_today}     />
+        <HistoryChart />
       </main>
 
       {/* Footer */}
