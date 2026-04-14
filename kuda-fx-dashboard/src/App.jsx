@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Header           from './components/Header.jsx'
 import UploadPanel      from './components/UploadPanel.jsx'
 import FacilityLimits   from './components/FacilityLimits.jsx'
@@ -10,11 +10,29 @@ import MaturityProfile  from './components/MaturityProfile.jsx'
 import SettledTrades    from './components/SettledTrades.jsx'
 import HistoryChart     from './components/HistoryChart.jsx'
 
+const STORAGE_KEY = () => `kuda_fx_dash_${new Date().toISOString().slice(0, 10)}`
+
 export default function App() {
   const [dashData, setDashData] = useState(null)
 
-  const handleData  = (data) => setDashData(data)
-  const handleReset = () => setDashData(null)
+  // On mount: restore today's data from localStorage so a refresh skips re-upload
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY())
+      if (saved) setDashData(JSON.parse(saved))
+    } catch (_) {}
+  }, [])
+
+  const handleData = (data) => {
+    setDashData(data)
+    // Persist today's result — cleared automatically tomorrow (different key)
+    try { localStorage.setItem(STORAGE_KEY(), JSON.stringify(data)) } catch (_) {}
+  }
+
+  const handleReset = () => {
+    setDashData(null)
+    try { localStorage.removeItem(STORAGE_KEY()) } catch (_) {}
+  }
 
   if (!dashData) {
     return <UploadPanel onData={handleData} />
