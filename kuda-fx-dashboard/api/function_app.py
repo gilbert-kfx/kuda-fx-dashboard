@@ -59,6 +59,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
         spot_usd_zar = float(req.form.get("spot_usd_zar", 0) or 0)
         gbp_usd      = float(req.form.get("gbp_usd",      0) or 0)
         eur_usd      = float(req.form.get("eur_usd",      0) or 0)
+        # prev_mtm_zar / prev_rate: accept manual override but auto-load from history if not provided
         prev_mtm_zar = float(req.form.get("prev_mtm_zar", 0) or 0)
         prev_rate    = float(req.form.get("prev_rate",    0) or 0)
 
@@ -71,10 +72,17 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
         # ── Derive spot rates if not provided ─────────────────────────────────
         spot_usd_zar, gbp_usd, eur_usd = _derive_rates(df, spot_usd_zar, gbp_usd, eur_usd)
 
-        # ── Run all calculations ───────────────────────────────────────────────
-        today_str  = df["MATURITY_DATE"].dt.strftime("%Y-%m-%d").max()  # fallback
-        mtm_date   = df["MTM_DATE"].iloc[0].strftime("%Y-%m-%d") if not df["MTM_DATE"].isna().all() else "unknown"
+        # ── Auto-load previous day from history (powers the bridge section) ───
+        mtm_date = df["MTM_DATE"].iloc[0].strftime("%Y-%m-%d") if not df["MTM_DATE"].isna().all() else "unknown"
 
+        if not prev_mtm_zar or not prev_rate:
+            prev_snap = _load_previous_snapshot(mtm_date)
+            if prev_snap:
+                prev_mtm_zar = prev_mtm_zar or prev_snap.get("mtm_zar",     0)
+                prev_rate    = prev_rate    or prev_snap.get("spot_usd_zar", 0)
+                logging.info(f"Auto-loaded prev day from history: MTM={prev_mtm_zar}, rate={prev_rate}")
+
+        # ── Run all calculations ───────────────────────────────────────────────
         result = {
             "meta": {
                 "mtm_date":     mtm_date,
@@ -270,6 +278,33 @@ def _load_snapshots(days: int = 90) -> list:
     except Exception as e:
         logging.warning(f"Failed to load snapshots: {e}")
         return []
+
+
+def _load_previous_snapshot(today_date: str) -> dict | None:
+    """
+    Load the most recent snapshot that is BEFORE today_date.
+    Used to auto-populate the day-on-day MTM bridge.
+    Returns a dict with at least 'mtm_zar' and 'spot_usd_zar', or None.
+    """
+    client = _get_blob_client()
+    if not client:
+        return None
+    try:
+        container = client.get_container_client(HISTORY_CONTAINER)
+        blobs = list(container.list_blobs())
+        # Filter to blobs strictly before today, sort descending, take most recent
+        prior = sorted(
+            [b for b in blobs if b.name.replace(".json", "") < today_date],
+            key=lambda b: b.name,
+            reverse=True,
+        )
+        if not prior:
+            return None
+        data = container.download_blob(prior[0].name).readall()
+        return json.loads(data)
+    except Exception as e:
+        logging.warning(f"Could not load previous snapshot: {e}")
+        return None
 
 
 # ─── Data Loading ──────────────────────────────────────────────────────────────
