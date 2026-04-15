@@ -154,6 +154,41 @@ def history_options(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
+@app.route(route="health", methods=["GET"])
+def health(req: func.HttpRequest) -> func.HttpResponse:
+    """Diagnostic endpoint — confirms API is alive and storage config status."""
+    storage_configured = bool(STORAGE_CONN_STR)
+    storage_reachable  = False
+    snapshot_count     = 0
+
+    if storage_configured and BLOB_AVAILABLE:
+        try:
+            client    = BlobServiceClient.from_connection_string(STORAGE_CONN_STR)
+            container = client.get_container_client(HISTORY_CONTAINER)
+            try:
+                container.create_container()
+            except Exception:
+                pass
+            blobs          = list(container.list_blobs())
+            snapshot_count = len(blobs)
+            storage_reachable = True
+        except Exception as e:
+            logging.warning(f"Health check storage error: {e}")
+
+    return func.HttpResponse(
+        json.dumps({
+            "status":              "ok",
+            "blob_sdk_available":  BLOB_AVAILABLE,
+            "storage_configured":  storage_configured,
+            "storage_reachable":   storage_reachable,
+            "snapshot_count":      snapshot_count,
+            "conn_str_prefix":     STORAGE_CONN_STR[:30] + "..." if STORAGE_CONN_STR else "NOT SET",
+        }),
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 # ─── Blob Storage Helpers ─────────────────────────────────────────────────────
 
 def _get_blob_client():
