@@ -206,6 +206,7 @@ def _save_snapshot(mtm_date: str, result: dict):
     """Save today's dashboard result as a JSON blob keyed by date."""
     client = _get_blob_client()
     if not client:
+        logging.warning("_save_snapshot: no blob client — storage not configured")
         return
     try:
         container = client.get_container_client(HISTORY_CONTAINER)
@@ -213,33 +214,31 @@ def _save_snapshot(mtm_date: str, result: dict):
         try:
             container.create_container()
         except Exception:
-            pass  # Already exists
+            pass  # Already exists — this is fine
 
-        # Build a compact summary for the history record
+        # Compact daily summary (no full result to keep blobs small)
         snapshot = {
-            "date":            mtm_date,
-            "mtm_zar":         result["csa_monitor"]["current_mtm_kuda_zar"],
-            "status":          result["csa_monitor"]["status"],
-            "buffer_zar":      result["csa_monitor"]["buffer_zar"],
-            "trigger_rate":    result["csa_monitor"]["trigger_rate"],
-            "spot_usd_zar":    result["meta"]["spot_usd_zar"],
-            "total_trades":    result["meta"]["total_trades"],
-            "net_nominal_usd": result["facility_limits"]["net_nominal_usd"],
-            "long_nominal_usd":result["facility_limits"]["long_nominal_usd"],
-            "nominal_util_pct":result["facility_limits"]["nominal_utilisation_pct"],
-            "settled_count":   result["settled_today"]["count"],
-            "settled_mtm":     result["settled_today"]["total_mtm"],
-            # Full result stored for drill-down
-            "full": result,
+            "date":             mtm_date,
+            "mtm_zar":          result["csa_monitor"]["current_mtm_kuda_zar"],
+            "status":           result["csa_monitor"]["status"],
+            "buffer_zar":       result["csa_monitor"]["buffer_zar"],
+            "trigger_rate":     result["csa_monitor"]["trigger_rate"],
+            "spot_usd_zar":     result["meta"]["spot_usd_zar"],
+            "total_trades":     result["meta"]["total_trades"],
+            "net_nominal_usd":  result["facility_limits"]["net_nominal_usd"],
+            "long_nominal_usd": result["facility_limits"]["long_nominal_usd"],
+            "nominal_util_pct": result["facility_limits"]["nominal_utilisation_pct"],
+            "settled_count":    result["settled_today"]["count"],
+            "settled_mtm":      result["settled_today"]["total_mtm"],
         }
 
-        blob_name = f"{mtm_date}.json"
-        container.upload_blob(
-            name=blob_name,
-            data=json.dumps(snapshot, default=_json_serial),
-            overwrite=True,
-            content_settings={"content_type": "application/json"},
-        )
+        blob_name    = f"{mtm_date}.json"
+        blob_data    = json.dumps(snapshot, default=_json_serial)
+
+        # ── FIX: do NOT pass content_settings as a dict — upload_blob only ──
+        blob_client = container.get_blob_client(blob_name)
+        blob_client.upload_blob(blob_data, overwrite=True)
+
         logging.info(f"Snapshot saved: {blob_name}")
     except Exception as e:
         logging.warning(f"Failed to save snapshot: {e}")
