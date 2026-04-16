@@ -343,24 +343,26 @@ def _save_snapshot(mtm_date: str, result: dict):
 
 
 def _load_snapshots(days: int = 90) -> list:
-    """Load the last N daily snapshots from blob storage, sorted newest first."""
+    """Load the last N daily compact snapshots (YYYY-MM-DD.json) from blob storage.
+    Excludes full/ blobs which have a different structure."""
     client = _get_blob_client()
     if not client:
         return []
     try:
         container = client.get_container_client(HISTORY_CONTAINER)
         blobs = list(container.list_blobs())
-        # Sort by name (YYYY-MM-DD.json) descending and take the last `days`
-        blobs.sort(key=lambda b: b.name, reverse=True)
-        blobs = blobs[:days]
+
+        # Only compact snapshots — name matches YYYY-MM-DD.json exactly (no slash)
+        compact = [b for b in blobs if not b.name.startswith("full/") and b.name.endswith(".json")]
+        compact.sort(key=lambda b: b.name, reverse=True)
+        compact = compact[:days]
 
         snapshots = []
-        for blob in blobs:
+        for blob in compact:
             try:
                 data = container.download_blob(blob.name).readall()
                 snap = json.loads(data)
-                # Return summary only (exclude full result to keep response small)
-                snapshots.append({k: v for k, v in snap.items() if k != "full"})
+                snapshots.append(snap)
             except Exception as e:
                 logging.warning(f"Could not load snapshot {blob.name}: {e}")
 
