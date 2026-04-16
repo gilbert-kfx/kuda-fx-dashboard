@@ -257,6 +257,16 @@ def health(req: func.HttpRequest) -> func.HttpResponse:
         except Exception as e:
             logging.warning(f"Health check storage error: {e}")
 
+    # Test live rate fetch so we can diagnose which source works from Azure
+    live_rate, live_rate_source = 0.0, "failed"
+    try:
+        zar, _, _ = _fetch_live_spot()
+        if zar > 0:
+            live_rate        = round(zar, 4)
+            live_rate_source = "ok"
+    except Exception:
+        pass
+
     return func.HttpResponse(
         json.dumps({
             "status":              "ok",
@@ -265,6 +275,8 @@ def health(req: func.HttpRequest) -> func.HttpResponse:
             "storage_reachable":   storage_reachable,
             "snapshot_count":      snapshot_count,
             "conn_str_prefix":     STORAGE_CONN_STR[:30] + "..." if STORAGE_CONN_STR else "NOT SET",
+            "live_rate_usd_zar":   live_rate,
+            "live_rate_source":    live_rate_source,
         }),
         mimetype="application/json",
         headers={"Access-Control-Allow-Origin": "*"},
@@ -597,27 +609,66 @@ def _parse_facility_summary(file_bytes: bytes) -> dict:
 
 def _fetch_live_spot() -> tuple[float, float, float]:
     """
-    Fetch live USD/ZAR, GBP/USD, EUR/USD from open.er-api.com (free, no API key).
-    Returns (spot_usd_zar, gbp_usd, eur_usd) or (0, 0, 0) on failure.
+    Fetch live USD/ZAR, GBP/USD, EUR/USD rates.
+    Tries multiple free public sources in order — returns first successful result.
+    Returns (spot_usd_zar, gbp_usd, eur_usd) or (0, 0, 0) if all fail.
     """
-    try:
-        import urllib.request
-        url = "https://open.er-api.com/v6/latest/USD"
-        req = urllib.request.Request(url, headers={"User-Agent": "kuda-fx-dashboard/1.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-        rates = data.get("rates", {})
+    import urllib.request
+
+    def _get(url, parse_fn, label):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; kuda-fx-dashboard/1.0)"},
+            )
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode())
+            result = parse_fn(data)
+            if result[0] > 0:
+                logging.info(f"Live rates from {label}: USD/ZAR={result[0]:.4f}")
+                return result
+        except Exception as e:
+            logging.warning(f"Rate source {label} failed: {e}")
+        return None
+
+    # ── Source 1: jsDelivr CDN-hosted currency data (no auth, CDN-cached) ──
+    def parse_jsdelivr(d):
+        usd = d.get("usd", {})
+        zar = float(usd.get("zar", 0))
+        gbp_inv = float(usd.get("gbp", 0))
+        eur_inv = float(usd.get("eur", 0))
+        return zar, (1/gbp_inv if gbp_inv > 0 else 0), (1/eur_inv if eur_inv > 0 else 0)
+
+    r = _get(
+        "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
+        parse_jsdelivr, "jsdelivr"
+    )
+    if r: return r
+
+    # ── Source 2: ExchangeRate-API (free tier, no key needed for latest) ──
+    def parse_er_api(d):
+        rates = d.get("rates", {})
         zar = float(rates.get("ZAR", 0))
         gbp = float(rates.get("GBP", 0))
         eur = float(rates.get("EUR", 0))
-        # GBP/USD and EUR/USD are inverses of USD/GBP, USD/EUR
-        gbp_usd = 1 / gbp if gbp > 0 else 0
-        eur_usd = 1 / eur if eur > 0 else 0
-        logging.info(f"Live rates fetched: USD/ZAR={zar}, GBP/USD={gbp_usd:.4f}, EUR/USD={eur_usd:.4f}")
-        return zar, gbp_usd, eur_usd
-    except Exception as e:
-        logging.warning(f"Could not fetch live rates: {e}")
-        return 0.0, 0.0, 0.0
+        return zar, (1/gbp if gbp > 0 else 0), (1/eur if eur > 0 else 0)
+
+    r = _get("https://open.er-api.com/v6/latest/USD", parse_er_api, "open.er-api.com")
+    if r: return r
+
+    # ── Source 3: Coinbase public API (no key, includes ZAR) ──
+    def parse_coinbase(d):
+        rates = d.get("data", {}).get("rates", {})
+        zar = float(rates.get("ZAR", 0))
+        gbp = float(rates.get("GBP", 0))
+        eur = float(rates.get("EUR", 0))
+        return zar, (1/float(gbp) if float(gbp) > 0 else 0), (1/float(eur) if float(eur) > 0 else 0)
+
+    r = _get("https://api.coinbase.com/v2/exchange-rates?currency=USD", parse_coinbase, "coinbase")
+    if r: return r
+
+    logging.warning("All live rate sources failed — falling back to book rate")
+    return 0.0, 0.0, 0.0
 
 
 def _derive_rates(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float):

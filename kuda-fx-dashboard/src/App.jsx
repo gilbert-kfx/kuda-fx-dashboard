@@ -9,35 +9,69 @@ import TopClientsTable  from './components/TopClientsTable.jsx'
 import MaturityProfile  from './components/MaturityProfile.jsx'
 import SettledTrades    from './components/SettledTrades.jsx'
 import HistoryChart     from './components/HistoryChart.jsx'
+import { LoaderIcon }   from 'lucide-react'
 
-const STORAGE_KEY = () => `kuda_fx_dash_${new Date().toISOString().slice(0, 10)}`
+/** Cache key is date-scoped so it auto-expires at midnight */
+const TODAY_KEY = () => `kuda_fx_dash_${new Date().toISOString().slice(0, 10)}`
 
 export default function App() {
   const [dashData, setDashData] = useState(null)
+  const [loading,  setLoading]  = useState(true)
 
-  // On mount: restore today's data from localStorage so a refresh skips re-upload
   useEffect(() => {
+    // ── Step 1: try localStorage (instant, no network) ──────────────────────
     try {
-      const saved = localStorage.getItem(STORAGE_KEY())
-      if (saved) setDashData(JSON.parse(saved))
+      const cached = localStorage.getItem(TODAY_KEY())
+      if (cached) {
+        setDashData(JSON.parse(cached))
+        setLoading(false)
+        return
+      }
     } catch (_) {}
+
+    // ── Step 2: ask the API if anyone has already uploaded today ─────────────
+    // This is what makes the dashboard shared — one upload, everyone sees it.
+    fetch('/api/today')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (data && data.meta) {
+          setDashData(data)
+          // Cache locally so subsequent visits in same browser skip the API call
+          try { localStorage.setItem(TODAY_KEY(), JSON.stringify(data)) } catch (_) {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
+  /** Called after a successful upload */
   const handleData = (data) => {
     setDashData(data)
-    // Persist today's result — cleared automatically tomorrow (different key)
-    try { localStorage.setItem(STORAGE_KEY(), JSON.stringify(data)) } catch (_) {}
+    try { localStorage.setItem(TODAY_KEY(), JSON.stringify(data)) } catch (_) {}
   }
 
+  /** "New upload" clears local cache so the upload screen appears */
   const handleReset = () => {
     setDashData(null)
-    try { localStorage.removeItem(STORAGE_KEY()) } catch (_) {}
+    try { localStorage.removeItem(TODAY_KEY()) } catch (_) {}
   }
 
+  // ── Loading splash (checking blob storage) ───────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-kuda-navy flex items-center justify-center gap-3 text-slate-400">
+        <LoaderIcon size={18} className="animate-spin" />
+        <span className="text-sm font-mono">Loading today's dashboard…</span>
+      </div>
+    )
+  }
+
+  // ── No data yet today — show upload screen ───────────────────────────────
   if (!dashData) {
     return <UploadPanel onData={handleData} />
   }
 
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   const { meta, facility_limits, csa_monitor, mtm_bridge,
           scenario_analysis, top_clients, maturity_profile, settled_today } = dashData
 
@@ -80,7 +114,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-kuda-border mt-8 py-4 px-6 text-center text-xs text-slate-600">
         CBC Kuda Foreign Exchange (Pty) Ltd · Investec Bank Facility FYN005836 ·
-        Data sourced from FXFlow · Generated {new Date().toLocaleString('en-ZA')}
+        Data sourced from FXFlow · Generated {new Date(meta.generated_at).toLocaleString('en-ZA')}
       </footer>
     </div>
   )
