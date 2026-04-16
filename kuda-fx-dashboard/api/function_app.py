@@ -236,6 +236,63 @@ def today_options(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
+@app.route(route="patch-snapshot", methods=["GET"])
+def patch_snapshot(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    One-time admin utility: overwrite specific fields in a stored compact snapshot.
+    Usage: /api/patch-snapshot?date=2026-04-14&spot_usd_zar=16.59
+    Recalculates trigger_rate and buffer_zar using the corrected spot.
+    """
+    try:
+        target_date  = req.params.get("date")
+        new_spot     = float(req.params.get("spot_usd_zar", 0) or 0)
+        if not target_date or not new_spot:
+            return func.HttpResponse(
+                json.dumps({"error": "date and spot_usd_zar are required"}),
+                status_code=400, mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+
+        client    = _get_blob_client()
+        container = client.get_container_client(HISTORY_CONTAINER)
+        blob_name = f"{target_date}.json"
+
+        # Load existing snapshot
+        data = json.loads(container.download_blob(blob_name).readall())
+        old_spot = data.get("spot_usd_zar")
+
+        # Update spot rate
+        data["spot_usd_zar"] = round(new_spot, 4)
+
+        # Recalculate trigger_rate using corrected spot
+        # trigger = spot + (CSA_THRESHOLD - mtm) / (-sensitivity)
+        # We don't have sensitivity stored, so recompute from stored values:
+        # sensitivity ≈ (CSA_THRESHOLD - mtm) / (trigger_old - old_spot)
+        # Just recompute trigger proportionally using the ratio
+        mtm        = data.get("mtm_zar", 0)
+        old_trigger = data.get("trigger_rate")
+        if old_trigger and old_spot:
+            # sensitivity = (CSA_THRESHOLD - mtm) / (old_trigger - old_spot)
+            sensitivity = (CSA_THRESHOLD_ZAR - mtm) / (old_trigger - old_spot)
+            new_trigger = round(new_spot + (CSA_THRESHOLD_ZAR - mtm) / sensitivity, 4)
+            data["trigger_rate"] = new_trigger
+
+        # Save back
+        container.get_blob_client(blob_name).upload_blob(
+            json.dumps(data, default=_json_serial), overwrite=True
+        )
+
+        return func.HttpResponse(
+            json.dumps({"patched": target_date, "old_spot": old_spot,
+                        "new_spot": new_spot, "new_trigger": data.get("trigger_rate")}),
+            mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    except Exception as e:
+        logging.exception("patch-snapshot error")
+        return _error(str(e), status_code=500)
+
+
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     """Diagnostic endpoint — confirms API is alive and storage config status."""
