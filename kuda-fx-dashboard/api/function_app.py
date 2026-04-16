@@ -184,6 +184,58 @@ def history_options(req: func.HttpRequest) -> func.HttpResponse:
     )
 
 
+@app.route(route="today", methods=["GET"])
+def today(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Returns today's full dashboard JSON if it has been uploaded, or 404 if not yet uploaded.
+    The frontend calls this on page load — if data exists, skip the upload screen entirely.
+    Optionally accepts ?date=YYYY-MM-DD to fetch a specific day (for debugging).
+    """
+    try:
+        target_date = req.params.get("date") or date.today().isoformat()
+        client = _get_blob_client()
+        if not client:
+            return func.HttpResponse(
+                json.dumps({"error": "storage_not_configured"}),
+                status_code=503,
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+        container  = client.get_container_client(HISTORY_CONTAINER)
+        blob_name  = f"full/{target_date}.json"
+        try:
+            data = container.download_blob(blob_name).readall()
+            return func.HttpResponse(
+                data,
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+        except Exception:
+            # Blob doesn't exist — no upload yet today
+            return func.HttpResponse(
+                json.dumps({"error": "not_uploaded", "date": target_date}),
+                status_code=404,
+                mimetype="application/json",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+    except Exception as e:
+        logging.exception("Error in today()")
+        return _error(str(e), status_code=500)
+
+
+@app.route(route="today", methods=["OPTIONS"])
+def today_options(req: func.HttpRequest) -> func.HttpResponse:
+    return func.HttpResponse(
+        "",
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin":  "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     """Diagnostic endpoint — confirms API is alive and storage config status."""
@@ -233,20 +285,29 @@ def _get_blob_client():
 
 
 def _save_snapshot(mtm_date: str, result: dict):
-    """Save today's dashboard result as a JSON blob keyed by date."""
+    """
+    Save two blobs to Azure Blob Storage on each upload:
+      1. full/{date}.json  — complete dashboard JSON so any browser can load today's data
+      2. {date}.json       — compact history snapshot for the trend chart
+    """
     client = _get_blob_client()
     if not client:
         logging.warning("_save_snapshot: no blob client — storage not configured")
         return
     try:
         container = client.get_container_client(HISTORY_CONTAINER)
-        # Create container if it doesn't exist
         try:
             container.create_container()
         except Exception:
-            pass  # Already exists — this is fine
+            pass  # Already exists
 
-        # Compact daily summary (no full result to keep blobs small)
+        # ── 1. Full dashboard blob (any team member loads this on visit) ──────
+        full_blob_name = f"full/{mtm_date}.json"
+        full_blob_data = json.dumps(result, default=_json_serial)
+        container.get_blob_client(full_blob_name).upload_blob(full_blob_data, overwrite=True)
+        logging.info(f"Full dashboard saved: {full_blob_name} ({len(full_blob_data)} bytes)")
+
+        # ── 2. Compact history snapshot (for the 90-day trend chart) ─────────
         snapshot = {
             "date":             mtm_date,
             "mtm_zar":          result["csa_monitor"]["current_mtm_kuda_zar"],
@@ -261,15 +322,10 @@ def _save_snapshot(mtm_date: str, result: dict):
             "settled_count":    result["settled_today"]["count"],
             "settled_mtm":      result["settled_today"]["total_mtm"],
         }
+        compact_blob_data = json.dumps(snapshot, default=_json_serial)
+        container.get_blob_client(f"{mtm_date}.json").upload_blob(compact_blob_data, overwrite=True)
+        logging.info(f"History snapshot saved: {mtm_date}.json")
 
-        blob_name    = f"{mtm_date}.json"
-        blob_data    = json.dumps(snapshot, default=_json_serial)
-
-        # ── FIX: do NOT pass content_settings as a dict — upload_blob only ──
-        blob_client = container.get_blob_client(blob_name)
-        blob_client.upload_blob(blob_data, overwrite=True)
-
-        logging.info(f"Snapshot saved: {blob_name}")
     except Exception as e:
         logging.warning(f"Failed to save snapshot: {e}")
 
