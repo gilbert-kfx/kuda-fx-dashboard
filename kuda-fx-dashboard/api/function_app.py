@@ -70,7 +70,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
         df = _load_trades(file_bytes, filename)
 
         # ── Derive spot rates if not provided ─────────────────────────────────
-        spot_usd_zar, gbp_usd, eur_usd = _derive_rates(df, spot_usd_zar, gbp_usd, eur_usd)
+        spot_usd_zar, gbp_usd, eur_usd, spot_source = _derive_rates(df, spot_usd_zar, gbp_usd, eur_usd)
 
         # ── Auto-load previous day from history (powers the bridge section) ───
         mtm_date = df["MTM_DATE"].iloc[0].strftime("%Y-%m-%d") if not df["MTM_DATE"].isna().all() else "unknown"
@@ -87,6 +87,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
             "meta": {
                 "mtm_date":     mtm_date,
                 "spot_usd_zar": round(spot_usd_zar, 4),
+                "spot_source":  spot_source,   # "user" | "live" | "book"
                 "gbp_usd":      round(gbp_usd, 4),
                 "eur_usd":      round(eur_usd, 4),
                 "total_trades": len(df),
@@ -448,35 +449,78 @@ def _load_csv(file_bytes: bytes) -> pd.DataFrame:
 
 # ─── Rate Derivation ──────────────────────────────────────────────────────────
 
+def _fetch_live_spot() -> tuple[float, float, float]:
+    """
+    Fetch live USD/ZAR, GBP/USD, EUR/USD from open.er-api.com (free, no API key).
+    Returns (spot_usd_zar, gbp_usd, eur_usd) or (0, 0, 0) on failure.
+    """
+    try:
+        import urllib.request
+        url = "https://open.er-api.com/v6/latest/USD"
+        req = urllib.request.Request(url, headers={"User-Agent": "kuda-fx-dashboard/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        rates = data.get("rates", {})
+        zar = float(rates.get("ZAR", 0))
+        gbp = float(rates.get("GBP", 0))
+        eur = float(rates.get("EUR", 0))
+        # GBP/USD and EUR/USD are inverses of USD/GBP, USD/EUR
+        gbp_usd = 1 / gbp if gbp > 0 else 0
+        eur_usd = 1 / eur if eur > 0 else 0
+        logging.info(f"Live rates fetched: USD/ZAR={zar}, GBP/USD={gbp_usd:.4f}, EUR/USD={eur_usd:.4f}")
+        return zar, gbp_usd, eur_usd
+    except Exception as e:
+        logging.warning(f"Could not fetch live rates: {e}")
+        return 0.0, 0.0, 0.0
+
+
 def _derive_rates(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float):
     """
-    Derive implied spot rates from the data if not explicitly provided.
-    Method: median DEAL_RATE for each currency group as approximation.
+    Derive spot rates with the following priority:
+      1. User-supplied value (passed in the form)
+      2. Live market rate from open.er-api.com
+      3. Book rate: median DEAL_RATE from forward trades (least accurate — labelled accordingly)
+    Returns (spot, gbp_usd, eur_usd, spot_source).
+    spot_source: "user" | "live" | "book"
     """
+    spot_source = "user" if spot > 0 else None
+
+    # Try to fill missing rates from live API in one call
+    live_spot, live_gbp, live_eur = (0.0, 0.0, 0.0)
+    if spot <= 0 or gbp_usd <= 0 or eur_usd <= 0:
+        live_spot, live_gbp, live_eur = _fetch_live_spot()
+
     if spot <= 0:
-        usd_trades = df[df["TRADE_CURR"] == "USD"]
-        if not usd_trades.empty:
-            spot = float(usd_trades["DEAL_RATE"].median())
+        if live_spot > 0:
+            spot = live_spot
+            spot_source = "live"
         else:
-            spot = 16.54  # fallback
+            usd_trades = df[df["TRADE_CURR"] == "USD"]
+            spot = float(usd_trades["DEAL_RATE"].median()) if not usd_trades.empty else 18.50
+            spot_source = "book"
+            logging.warning(f"Using book-derived spot rate: {spot:.4f} — user should enter today's market rate")
 
     if gbp_usd <= 0:
-        gbp_trades = df[df["TRADE_CURR"] == "GBP"]
-        if not gbp_trades.empty:
-            gbp_zar = float(gbp_trades["DEAL_RATE"].median())
-            gbp_usd = gbp_zar / spot
+        if live_gbp > 0:
+            gbp_usd = live_gbp
         else:
-            gbp_usd = 1.27  # fallback
+            gbp_trades = df[df["TRADE_CURR"] == "GBP"]
+            if not gbp_trades.empty:
+                gbp_usd = float(gbp_trades["DEAL_RATE"].median()) / spot
+            else:
+                gbp_usd = 1.27
 
     if eur_usd <= 0:
-        eur_trades = df[df["TRADE_CURR"] == "EUR"]
-        if not eur_trades.empty:
-            eur_zar = float(eur_trades["DEAL_RATE"].median())
-            eur_usd = eur_zar / spot
+        if live_eur > 0:
+            eur_usd = live_eur
         else:
-            eur_usd = 1.09  # fallback
+            eur_trades = df[df["TRADE_CURR"] == "EUR"]
+            if not eur_trades.empty:
+                eur_usd = float(eur_trades["DEAL_RATE"].median()) / spot
+            else:
+                eur_usd = 1.09
 
-    return spot, gbp_usd, eur_usd
+    return spot, gbp_usd, eur_usd, spot_source
 
 
 # ─── Sensitivity & Scenario MTM ───────────────────────────────────────────────

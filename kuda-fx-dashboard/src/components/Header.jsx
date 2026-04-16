@@ -22,11 +22,13 @@ export default function Header({ meta, onReset }) {
         {/* Meta info */}
         {meta && (
           <div className="hidden md:flex items-center gap-6 text-xs text-slate-400 font-mono">
-            <MetaChip label="MTM Date"     value={dateStr(meta.mtm_date)} />
-            <MetaChip label="USD/ZAR"      value={rate(meta.spot_usd_zar)} highlight />
-            <MetaChip label="GBP/USD"      value={rate(meta.gbp_usd)} />
-            <MetaChip label="EUR/USD"      value={rate(meta.eur_usd)} />
-            <MetaChip label="Trades"       value={meta.total_trades} />
+            <MetaChip label="MTM Date"  value={dateStr(meta.mtm_date)} />
+            <SpotChip meta={meta} />
+            <MetaChip label="GBP/ZAR"   value={rate(meta.gbp_usd * meta.spot_usd_zar, 4)} />
+            <MetaChip label="EUR/ZAR"   value={rate(meta.eur_usd * meta.spot_usd_zar, 4)} />
+            <MetaChip label="GBP/USD"   value={rate(meta.gbp_usd, 4)} />
+            <MetaChip label="EUR/USD"   value={rate(meta.eur_usd, 4)} />
+            <MetaChip label="Trades"    value={meta.total_trades} />
           </div>
         )}
 
@@ -53,6 +55,37 @@ function MetaChip({ label, value, highlight }) {
     <div className="flex items-center gap-1.5">
       <span className="text-slate-600">{label}</span>
       <span className={highlight ? 'text-kuda-teal font-medium' : 'text-slate-300'}>{value}</span>
+    </div>
+  )
+}
+
+/** Spot rate chip — shows source badge so users know where the rate came from. */
+function SpotChip({ meta }) {
+  const { spot_usd_zar, spot_source } = meta
+  const badge = {
+    user: { label: 'manual', color: 'text-kuda-teal' },
+    live: { label: 'live',   color: 'text-kuda-teal' },
+    book: { label: 'book avg ⚠', color: 'text-amber-400' },
+  }[spot_source] || { label: '', color: '' }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-slate-600">USD/ZAR</span>
+      <span className="text-kuda-teal font-medium">{rate(spot_usd_zar)}</span>
+      {badge.label && (
+        <span
+          className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded ${badge.color} border border-current opacity-70`}
+          title={
+            spot_source === 'book'
+              ? 'Rate derived from avg forward booking rates — not the live market spot. Enter today\'s USD/ZAR on upload to fix.'
+              : spot_source === 'live'
+              ? 'Live market rate fetched automatically'
+              : 'Rate manually entered on upload'
+          }
+        >
+          {badge.label}
+        </span>
+      )}
     </div>
   )
 }

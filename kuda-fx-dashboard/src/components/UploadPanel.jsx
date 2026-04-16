@@ -108,13 +108,34 @@ export default function UploadPanel({ onData }) {
           )}
         </div>
 
-        {/* Rate inputs */}
+        {/* Spot rate — prominent, required for accuracy */}
+        <div className="card border border-amber-500/30 bg-amber-500/5">
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-amber-400 text-lg mt-0.5">📍</span>
+            <div>
+              <p className="text-sm font-semibold text-white">Today's USD/ZAR Spot Rate</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Enter the current market rate (e.g. from Bloomberg or your Reuters terminal).
+                If left blank, the dashboard will attempt to fetch a live rate automatically —
+                but entering it here guarantees accuracy for the CSA trigger and scenario analysis.
+              </p>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={spotRate}
+            onChange={(e) => setSpotRate(e.target.value)}
+            placeholder="e.g. 18.42  (today's USD/ZAR mid-market spot)"
+            className="input-dark w-full text-base font-mono placeholder:text-slate-600"
+          />
+        </div>
+
+        {/* Other rates + bridge inputs */}
         <div className="card">
-          <p className="section-title mb-3">Market Rates &amp; Bridge Inputs
-            <span className="normal-case text-slate-600 ml-2 tracking-normal">(optional — derived from data if blank)</span>
+          <p className="section-title mb-3">Cross Rates &amp; Bridge Inputs
+            <span className="normal-case text-slate-600 ml-2 tracking-normal">(optional — auto-fetched or derived if blank)</span>
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <RateInput label="USD/ZAR Spot"      value={spotRate}  onChange={setSpotRate}  placeholder="e.g. 16.54" />
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
             <RateInput label="GBP/USD Cross"     value={gbpUsd}    onChange={setGbpUsd}    placeholder="e.g. 1.2740" />
             <RateInput label="EUR/USD Cross"     value={eurUsd}    onChange={setEurUsd}    placeholder="e.g. 1.0850" />
             <RateInput label="Prev Day MTM (R)"  value={prevMtm}   onChange={setPrevMtm}   placeholder="e.g. 3 870 000" />
