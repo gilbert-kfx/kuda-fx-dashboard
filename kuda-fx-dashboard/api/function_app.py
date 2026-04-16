@@ -66,11 +66,31 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
         file_bytes = trades_file.read()
         filename   = trades_file.filename.lower()
 
+        # ── Parse optional Facility Summary file ──────────────────────────────
+        summary_file    = req.files.get("facility_summary_file")
+        facility_summary = {}
+        if summary_file:
+            try:
+                facility_summary = _parse_facility_summary(summary_file.read())
+                logging.info(f"Facility Summary parsed: {facility_summary}")
+            except Exception as e:
+                logging.warning(f"Could not parse facility summary: {e}")
+
         # ── Load data ─────────────────────────────────────────────────────────
         df = _load_trades(file_bytes, filename)
 
-        # ── Derive spot rates if not provided ─────────────────────────────────
-        spot_usd_zar, gbp_usd, eur_usd, spot_source = _derive_rates(df, spot_usd_zar, gbp_usd, eur_usd)
+        # ── Resolve spot rate ─────────────────────────────────────────────────
+        # Priority: user-supplied > Facility Summary (authoritative FXFlow) > live API > book avg
+        if spot_usd_zar > 0:
+            spot_source = "user"
+            # Still fill missing cross-rates via live API / book
+            _, gbp_usd, eur_usd, _ = _derive_rates(df, 0, gbp_usd, eur_usd)
+        elif facility_summary.get("market_rate_usd_zar", 0) > 0:
+            spot_usd_zar = facility_summary["market_rate_usd_zar"]
+            spot_source  = "fxflow"
+            _, gbp_usd, eur_usd, _ = _derive_rates(df, 0, gbp_usd, eur_usd)
+        else:
+            spot_usd_zar, gbp_usd, eur_usd, spot_source = _derive_rates(df, 0, gbp_usd, eur_usd)
 
         # ── Auto-load previous day from history (powers the bridge section) ───
         mtm_date = df["MTM_DATE"].iloc[0].strftime("%Y-%m-%d") if not df["MTM_DATE"].isna().all() else "unknown"
@@ -85,15 +105,16 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
         # ── Run all calculations ───────────────────────────────────────────────
         result = {
             "meta": {
-                "mtm_date":     mtm_date,
-                "spot_usd_zar": round(spot_usd_zar, 4),
-                "spot_source":  spot_source,   # "user" | "live" | "book"
-                "gbp_usd":      round(gbp_usd, 4),
-                "eur_usd":      round(eur_usd, 4),
-                "total_trades": len(df),
-                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "mtm_date":        mtm_date,
+                "spot_usd_zar":    round(spot_usd_zar, 4),
+                "spot_source":     spot_source,   # "user" | "fxflow" | "live" | "book"
+                "gbp_usd":         round(gbp_usd, 4),
+                "eur_usd":         round(eur_usd, 4),
+                "total_trades":    len(df),
+                "has_summary":     bool(facility_summary),
+                "generated_at":    datetime.utcnow().isoformat() + "Z",
             },
-            "facility_limits":   _calc_facility_limits(df, spot_usd_zar, gbp_usd, eur_usd),
+            "facility_limits":   _calc_facility_limits(df, spot_usd_zar, gbp_usd, eur_usd, facility_summary),
             "csa_monitor":       _calc_csa_monitor(df, spot_usd_zar, gbp_usd, eur_usd),
             "mtm_bridge":        _calc_mtm_bridge(df, prev_mtm_zar, prev_rate, spot_usd_zar, gbp_usd, eur_usd),
             "scenario_analysis": _calc_scenario_analysis(df, spot_usd_zar, gbp_usd, eur_usd),
@@ -447,6 +468,75 @@ def _load_csv(file_bytes: bytes) -> pd.DataFrame:
     return df
 
 
+# ─── Facility Summary Parser ──────────────────────────────────────────────────
+
+def _parse_facility_summary(file_bytes: bytes) -> dict:
+    """
+    Parse the FXFlow 'Facility Summary' Excel report and extract authoritative figures.
+    Expected layout (rows vary by FXFlow version):
+      Row with label 'USD/ZAR'  → col[1]=closing rate, col[2]=market rate
+      Row with label 'Nominal'  → col[2]=nominal_usd (market), col[5]=facility_cap_usd
+      Row with label 'PFE'      → col[4]=pfe_zar (market), col[5]=pfe_limit_zar
+      Row with label 'MTM Value'→ col[3]=mtm_zar (Kuda perspective, positive=in the money)
+      Row with label 'Threshold'→ col[5]=csa_threshold_zar
+    Returns a dict with extracted values (only keys present when values were found).
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        ws = wb.active
+        result = {}
+        for row in ws.iter_rows(values_only=True):
+            if not row or row[0] is None:
+                continue
+            label = str(row[0]).strip().lower()
+            cols  = list(row)  # 0-indexed
+
+            def _f(idx):
+                """Safe float extraction."""
+                try:
+                    v = cols[idx]
+                    return float(v) if v is not None else None
+                except (IndexError, TypeError, ValueError):
+                    return None
+
+            if label == "usd/zar":
+                closing = _f(1)
+                market  = _f(2)
+                if closing: result["closing_rate_usd_zar"] = closing
+                if market:  result["market_rate_usd_zar"]  = market
+
+            elif label == "nominal":
+                nom_market = _f(2)
+                cap        = _f(5)
+                if nom_market: result["nominal_usd_market"]  = nom_market
+                if cap:        result["facility_cap_usd"]     = cap
+
+            elif label == "pfe":
+                pfe_market = _f(4)
+                pfe_limit  = _f(5)
+                if pfe_market is not None: result["pfe_zar_market"] = pfe_market
+                if pfe_limit  is not None: result["pfe_limit_zar"]  = pfe_limit
+
+            elif label == "mtm value":
+                mtm_zar = _f(3)
+                if mtm_zar is not None: result["mtm_zar"] = mtm_zar
+
+            elif label == "threshold":
+                threshold = _f(5)
+                if threshold: result["csa_threshold_zar"] = threshold
+
+            elif label == "csa (credit support amount)":
+                csa = _f(3)
+                if csa is not None: result["csa_buffer_zar"] = csa
+
+        logging.info(f"Facility Summary parsed OK: {result}")
+        return result
+    except Exception as e:
+        logging.warning(f"_parse_facility_summary failed: {e}")
+        return {}
+
+
 # ─── Rate Derivation ──────────────────────────────────────────────────────────
 
 def _fetch_live_spot() -> tuple[float, float, float]:
@@ -565,36 +655,58 @@ def _scenario_mtm(current_mtm_kuda: float, sensitivity: float, current_rate: flo
 
 # ─── Dashboard Sections ───────────────────────────────────────────────────────
 
-def _calc_facility_limits(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float) -> dict:
-    """Section 1: Facility utilisation — nominal, PFE, settlement, tenor."""
+def _calc_facility_limits(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float,
+                          facility_summary: dict = None) -> dict:
+    """Section 1: Facility utilisation — nominal, PFE, settlement, tenor.
+
+    If facility_summary is provided (parsed from the FXFlow Facility Summary Excel),
+    its figures take precedence over derived values for nominal and PFE, since
+    FXFlow computes these using its own proprietary risk model.
+    """
+    if facility_summary is None:
+        facility_summary = {}
 
     today = pd.Timestamp.today().normalize()
 
-    # Gross nominal (USD equivalent) — sum of abs(NOMINAL_USD) across all open trades
-    gross_nominal_usd = float(df["NOMINAL_USD"].abs().sum())
+    # ── Nominal ───────────────────────────────────────────────────────────────
+    if facility_summary.get("nominal_usd_market"):
+        # Facility Summary uploaded — use FXFlow's authoritative figure directly
+        long_nominal_usd  = facility_summary["nominal_usd_market"]
+        gross_nominal_usd = long_nominal_usd
+        net_nominal_usd   = long_nominal_usd
+    else:
+        # Derived from trades — matches FXFlow within ~0.7% (rate conversion diff for GBP/EUR)
+        # FXFlow Nominal = long-side NOMINAL_USD for FECs + Options, excluding CANCELLATIONs
+        # CANCELLATION product types offset existing trades and must NOT be counted as new exposure.
+        pt = df["PRODUCT_TYPE"].str.strip() if "PRODUCT_TYPE" in df.columns else df["PRODUCT"].str.strip()
+        FEC_TYPES = ["FORWARD", "DRAWDOWN", "EXTENSION"]
+        OPT_TYPES = ["Vanilla", "Forward Enhancer"]
 
-    # Long-side nominal: sum of POSITIVE NOMINAL_USD only
-    # (Kuda's outstanding buy-side FEC exposure with Investec — what the dealing cap monitors)
-    long_nominal_usd = float(df.loc[df["NOMINAL_USD"] > 0, "NOMINAL_USD"].sum())
+        fec_mask  = pt.isin(FEC_TYPES)
+        opt_mask  = pt.isin(OPT_TYPES)
 
-    # Net nominal — sum of signed NOMINAL_USD (long minus short)
-    net_nominal_usd = float(df["NOMINAL_USD"].sum())
+        # Long = positive NOMINAL_USD; these are Kuda's buying-side risk positions
+        long_nominal_fec = float(df.loc[fec_mask & (df["NOMINAL_USD"] > 0), "NOMINAL_USD"].sum())
+        long_nominal_opt = float(df.loc[opt_mask & (df["NOMINAL_USD"] > 0), "NOMINAL_USD"].sum())
+        long_nominal_usd  = long_nominal_fec + long_nominal_opt
+        gross_nominal_usd = float(df["NOMINAL_USD"].abs().sum())
+        net_nominal_usd   = float(df["NOMINAL_USD"].sum())
 
-    # For the dealing-cap utilisation, use the long-side notional
-    nominal_for_cap = long_nominal_usd
+    # Facility cap — prefer from summary, else use constant
+    facility_cap_usd = facility_summary.get("facility_cap_usd") or FACILITY_DEALING_CAP_USD
+    nominal_for_cap  = long_nominal_usd
 
-    # PFE is typically the max potential future exposure; here we approximate as
-    # the absolute Kuda MTM exposure under a stress scenario (not stored in CSV).
-    # We use the stress MTM at +3σ move (≈18.5) vs threshold as a proxy.
-    current_mtm_kuda = float(df["MTM_ZAR"].sum())
-    sensitivity = _compute_sensitivity(df, spot, gbp_usd, eur_usd)
-    pfe_scenario_rate = spot * 1.10  # +10% stress
-    pfe_stress_mtm    = _scenario_mtm(current_mtm_kuda, sensitivity, spot, pfe_scenario_rate)
-    pfe_exposure_zar  = abs(min(pfe_stress_mtm, 0))  # PFE is the potential negative MTM
+    # ── PFE ───────────────────────────────────────────────────────────────────
+    if facility_summary.get("pfe_zar_market") is not None:
+        pfe_zar = facility_summary["pfe_zar_market"]
+    else:
+        current_mtm_kuda  = float(df["MTM_ZAR"].sum())
+        sensitivity        = _compute_sensitivity(df, spot, gbp_usd, eur_usd)
+        pfe_scenario_rate  = spot * 1.10
+        pfe_stress_mtm     = _scenario_mtm(current_mtm_kuda, sensitivity, spot, pfe_scenario_rate)
+        pfe_zar            = abs(min(pfe_stress_mtm, 0))
 
-    # For display, use the PFE from the report if we have it via the net nominal
-    # (in practice Investec computes PFE; we proxy it)
-    pfe_zar = pfe_exposure_zar
+    pfe_limit_zar = facility_summary.get("pfe_limit_zar") or FACILITY_PFE_LIMIT_ZAR
 
     # Settlement limit: max single-date gross FCY notional in USD equiv
     settle_by_date = (
@@ -615,24 +727,26 @@ def _calc_facility_limits(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd
         max_tenor_days = 0
     tenor_breach = max_tenor_days > FACILITY_MAX_TENOR_DAYS
 
-    # Utilisation
-    nominal_util_pct = round(nominal_for_cap / FACILITY_DEALING_CAP_USD * 100, 1)
-    pfe_util_pct      = round(pfe_zar / FACILITY_PFE_LIMIT_ZAR * 100, 1)
+    # Utilisation — use the actual cap/limit from facility summary if available
+    nominal_util_pct = round(nominal_for_cap / facility_cap_usd * 100, 1)
+    pfe_util_pct     = round(pfe_zar / pfe_limit_zar * 100, 1) if pfe_limit_zar > 0 else 0
 
-    # Trade type breakdown
-    is_fec = df["PRODUCT"].isin(["Currency"]) if "PRODUCT" in df.columns else pd.Series(True, index=df.index)
-    is_opt = df["PRODUCT"].isin(["Option"])   if "PRODUCT" in df.columns else pd.Series(False, index=df.index)
-    fec_df = df[is_fec]
-    opt_df = df[is_opt]
+    # Trade type breakdown by PRODUCT_TYPE
+    pt_col  = "PRODUCT_TYPE" if "PRODUCT_TYPE" in df.columns else "PRODUCT"
+    pt_vals = df[pt_col].str.strip()
+    FEC_PRODUCT_TYPES = ["FORWARD", "DRAWDOWN", "EXTENSION", "CANCELLATION"]
+    OPT_PRODUCT_TYPES = ["Vanilla", "Forward Enhancer"]
+    fec_df = df[pt_vals.isin(FEC_PRODUCT_TYPES)]
+    opt_df = df[pt_vals.isin(OPT_PRODUCT_TYPES)]
 
     return {
-        "dealing_cap_usd":         FACILITY_DEALING_CAP_USD,
+        "dealing_cap_usd":         round(facility_cap_usd),
         "long_nominal_usd":        round(long_nominal_usd),
         "net_nominal_usd":         round(net_nominal_usd),
         "gross_nominal_usd":       round(gross_nominal_usd),
-        "nominal_headroom_usd":    round(FACILITY_DEALING_CAP_USD - long_nominal_usd),
+        "nominal_headroom_usd":    round(facility_cap_usd - long_nominal_usd),
         "nominal_utilisation_pct": nominal_util_pct,
-        "pfe_limit_zar":           FACILITY_PFE_LIMIT_ZAR,
+        "pfe_limit_zar":           round(pfe_limit_zar),
         "pfe_exposure_zar":        round(pfe_zar),
         "pfe_utilisation_pct":     pfe_util_pct,
         "settlement_limit_usd":    FACILITY_SETTLEMENT_LIMIT,

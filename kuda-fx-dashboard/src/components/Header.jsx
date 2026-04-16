@@ -63,9 +63,10 @@ function MetaChip({ label, value, highlight }) {
 function SpotChip({ meta }) {
   const { spot_usd_zar, spot_source } = meta
   const badge = {
-    user: { label: 'manual', color: 'text-kuda-teal' },
-    live: { label: 'live',   color: 'text-kuda-teal' },
-    book: { label: 'book avg ⚠', color: 'text-amber-400' },
+    user:   { label: 'manual',   color: 'text-kuda-teal' },
+    fxflow: { label: 'FXFlow',   color: 'text-kuda-teal' },
+    live:   { label: 'live',     color: 'text-kuda-teal' },
+    book:   { label: 'book avg ⚠', color: 'text-amber-400' },
   }[spot_source] || { label: '', color: '' }
 
   return (
@@ -77,7 +78,9 @@ function SpotChip({ meta }) {
           className={`text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded ${badge.color} border border-current opacity-70`}
           title={
             spot_source === 'book'
-              ? 'Rate derived from avg forward booking rates — not the live market spot. Enter today\'s USD/ZAR on upload to fix.'
+              ? 'Rate derived from avg forward booking rates — not the live market spot. Upload the FXFlow Facility Summary or enter today\'s rate manually to fix.'
+              : spot_source === 'fxflow'
+              ? 'Market rate sourced directly from FXFlow Facility Summary'
               : spot_source === 'live'
               ? 'Live market rate fetched automatically'
               : 'Rate manually entered on upload'

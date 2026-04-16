@@ -1,19 +1,21 @@
 import React, { useState, useRef, useCallback } from 'react'
-import { UploadCloudIcon, FileSpreadsheetIcon, AlertCircleIcon, LoaderIcon } from 'lucide-react'
+import { UploadCloudIcon, FileSpreadsheetIcon, AlertCircleIcon, LoaderIcon, PlusCircleIcon } from 'lucide-react'
 
 const ACCEPTED = '.xlsx,.xls,.csv'
 
 export default function UploadPanel({ onData }) {
-  const [dragging,   setDragging]   = useState(false)
-  const [file,       setFile]       = useState(null)
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState(null)
-  const [spotRate,   setSpotRate]   = useState('')
-  const [gbpUsd,     setGbpUsd]     = useState('')
-  const [eurUsd,     setEurUsd]     = useState('')
-  const [prevMtm,    setPrevMtm]    = useState('')
-  const [prevRate,   setPrevRate]   = useState('')
-  const inputRef = useRef()
+  const [dragging,     setDragging]     = useState(false)
+  const [file,         setFile]         = useState(null)
+  const [summaryFile,  setSummaryFile]  = useState(null)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState(null)
+  const [spotRate,     setSpotRate]     = useState('')
+  const [gbpUsd,       setGbpUsd]       = useState('')
+  const [eurUsd,       setEurUsd]       = useState('')
+  const [prevMtm,      setPrevMtm]      = useState('')
+  const [prevRate,     setPrevRate]     = useState('')
+  const inputRef        = useRef()
+  const summaryInputRef = useRef()
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -39,6 +41,7 @@ export default function UploadPanel({ onData }) {
 
     const form = new FormData()
     form.append('trades_file', file)
+    if (summaryFile) form.append('facility_summary_file', summaryFile)
     if (spotRate) form.append('spot_usd_zar', spotRate)
     if (gbpUsd)   form.append('gbp_usd',      gbpUsd)
     if (eurUsd)   form.append('eur_usd',       eurUsd)
@@ -108,27 +111,65 @@ export default function UploadPanel({ onData }) {
           )}
         </div>
 
-        {/* Spot rate — prominent, required for accuracy */}
-        <div className="card border border-amber-500/30 bg-amber-500/5">
-          <div className="flex items-start gap-3 mb-3">
-            <span className="text-amber-400 text-lg mt-0.5">📍</span>
-            <div>
-              <p className="text-sm font-semibold text-white">Today's USD/ZAR Spot Rate</p>
+        {/* Facility Summary file — optional but gives accurate nominal/PFE/rate */}
+        <div
+          className="card border border-kuda-teal/20 cursor-pointer hover:border-kuda-teal/50 transition-all"
+          onClick={() => summaryInputRef.current?.click()}
+        >
+          <input
+            ref={summaryInputRef}
+            type="file"
+            accept={ACCEPTED}
+            className="hidden"
+            onChange={(e) => e.target.files[0] && setSummaryFile(e.target.files[0])}
+          />
+          <div className="flex items-center gap-3">
+            {summaryFile
+              ? <FileSpreadsheetIcon size={20} className="text-kuda-teal shrink-0" />
+              : <PlusCircleIcon size={20} className="text-slate-500 shrink-0" />
+            }
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">
+                {summaryFile ? summaryFile.name : 'Add FXFlow Facility Summary (recommended)'}
+              </p>
               <p className="text-xs text-slate-400 mt-0.5">
-                Enter the current market rate (e.g. from Bloomberg or your Reuters terminal).
-                If left blank, the dashboard will attempt to fetch a live rate automatically —
-                but entering it here guarantees accuracy for the CSA trigger and scenario analysis.
+                {summaryFile
+                  ? 'Rates, nominal & PFE will be read directly from this file'
+                  : 'Upload the "Facility Summary" report alongside the trades file for accurate nominal, PFE & USD/ZAR rate'}
               </p>
             </div>
+            {summaryFile && (
+              <button
+                className="ml-auto text-xs text-slate-500 hover:text-red-400 shrink-0"
+                onClick={(e) => { e.stopPropagation(); setSummaryFile(null) }}
+              >✕</button>
+            )}
           </div>
-          <input
-            type="text"
-            value={spotRate}
-            onChange={(e) => setSpotRate(e.target.value)}
-            placeholder="e.g. 18.42  (today's USD/ZAR mid-market spot)"
-            className="input-dark w-full text-base font-mono placeholder:text-slate-600"
-          />
         </div>
+
+        {/* Spot rate — shown only when no Facility Summary uploaded */}
+        {!summaryFile && (
+          <div className="card border border-amber-500/30 bg-amber-500/5">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-amber-400 text-lg mt-0.5">📍</span>
+              <div>
+                <p className="text-sm font-semibold text-white">Today's USD/ZAR Spot Rate</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Upload the FXFlow Facility Summary above to set this automatically, or enter
+                  the current market mid-rate here (e.g. from Bloomberg or Reuters).
+                  If left blank the dashboard will try to fetch a live rate.
+                </p>
+              </div>
+            </div>
+            <input
+              type="text"
+              value={spotRate}
+              onChange={(e) => setSpotRate(e.target.value)}
+              placeholder="e.g. 16.43  (today's USD/ZAR mid-market spot)"
+              className="input-dark w-full text-base font-mono placeholder:text-slate-600"
+            />
+          </div>
+        )}
 
         {/* Other rates + bridge inputs */}
         <div className="card">
