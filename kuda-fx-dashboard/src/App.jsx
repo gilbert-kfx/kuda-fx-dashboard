@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import PasswordGate     from './components/PasswordGate.jsx'
 import Header           from './components/Header.jsx'
 import UploadPanel      from './components/UploadPanel.jsx'
 import FacilityLimits   from './components/FacilityLimits.jsx'
@@ -15,6 +16,14 @@ import { LoaderIcon }   from 'lucide-react'
 const TODAY_KEY = () => `kuda_fx_dash_${new Date().toISOString().slice(0, 10)}`
 
 export default function App() {
+  return (
+    <PasswordGate>
+      <Dashboard />
+    </PasswordGate>
+  )
+}
+
+function Dashboard() {
   const [dashData, setDashData] = useState(null)
   const [loading,  setLoading]  = useState(true)
 
