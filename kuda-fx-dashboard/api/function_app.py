@@ -103,6 +103,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
                 logging.info(f"Auto-loaded prev day from history: MTM={prev_mtm_zar}, rate={prev_rate}")
 
         # ── Run all calculations ───────────────────────────────────────────────
+        fac_limits = _calc_facility_limits(df, spot_usd_zar, gbp_usd, eur_usd, facility_summary)
         result = {
             "meta": {
                 "mtm_date":        mtm_date,
@@ -114,13 +115,14 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
                 "has_summary":     bool(facility_summary),
                 "generated_at":    datetime.utcnow().isoformat() + "Z",
             },
-            "facility_limits":   _calc_facility_limits(df, spot_usd_zar, gbp_usd, eur_usd, facility_summary),
-            "csa_monitor":       _calc_csa_monitor(df, spot_usd_zar, gbp_usd, eur_usd),
-            "mtm_bridge":        _calc_mtm_bridge(df, prev_mtm_zar, prev_rate, spot_usd_zar, gbp_usd, eur_usd),
-            "scenario_analysis": _calc_scenario_analysis(df, spot_usd_zar, gbp_usd, eur_usd),
-            "top_clients":       _calc_top_clients(df, spot_usd_zar, gbp_usd, eur_usd),
-            "maturity_profile":  _calc_maturity_profile(df),
-            "settled_today":     _calc_settled_today(df),
+            "facility_limits":    fac_limits,
+            "csa_monitor":        _calc_csa_monitor(df, spot_usd_zar, gbp_usd, eur_usd),
+            "mtm_bridge":         _calc_mtm_bridge(df, prev_mtm_zar, prev_rate, spot_usd_zar, gbp_usd, eur_usd),
+            "scenario_analysis":  _calc_scenario_analysis(df, spot_usd_zar, gbp_usd, eur_usd),
+            "top_clients":        _calc_top_clients(df, spot_usd_zar, gbp_usd, eur_usd),
+            "maturity_profile":   _calc_maturity_profile(df),
+            "facility_projection": _calc_facility_projection(df, fac_limits.get("dealing_cap_usd")),
+            "settled_today":      _calc_settled_today(df),
         }
 
         # ── Save snapshot to blob storage (if configured) ─────────────────────
@@ -1132,6 +1134,66 @@ def _calc_top_clients(
         "display_rates": [str(r) for r in display_rates],
         "clients":       rows,
         "current_rate":  round(spot, 4),
+    }
+
+
+def _calc_facility_projection(df: pd.DataFrame, facility_cap_usd: float = None) -> dict:
+    """Section: Facility nominal projection — how much rolls off as contracts mature."""
+    cap   = facility_cap_usd or FACILITY_DEALING_CAP_USD
+    today = pd.Timestamp.today().normalize()
+
+    FEC_TYPES = ["FORWARD", "DRAWDOWN", "EXTENSION"]
+    OPT_TYPES = ["Vanilla", "Forward Enhancer"]
+
+    pt_col   = "PRODUCT_TYPE" if "PRODUCT_TYPE" in df.columns else "PRODUCT"
+    pt_vals  = df[pt_col].str.strip()
+
+    # Active long trades only — same filter as nominal calc (excludes CANCELLATION)
+    active_mask = (
+        pt_vals.isin(FEC_TYPES + OPT_TYPES)
+        & (df["NOMINAL_USD"] > 0)
+        & df["MATURITY_DATE"].notna()
+    )
+    active = df[active_mask].copy()
+    active["days_to_maturity"] = (active["MATURITY_DATE"] - today).dt.days
+
+    current_nominal = float(active["NOMINAL_USD"].sum())
+
+    horizons = [
+        {"label": "7 days",   "days": 7},
+        {"label": "14 days",  "days": 14},
+        {"label": "1 month",  "days": 30},
+        {"label": "2 months", "days": 60},
+        {"label": "3 months", "days": 90},
+    ]
+
+    result_horizons = []
+    for h in horizons:
+        # Cumulative — all trades maturing from today through horizon end
+        mask = (active["days_to_maturity"] >= 0) & (active["days_to_maturity"] <= h["days"])
+        maturing     = active[mask]
+        contracts_ct = int(len(maturing))
+        nom_maturing = float(maturing["NOMINAL_USD"].sum())
+        projected    = max(current_nominal - nom_maturing, 0)
+        headroom     = cap - projected
+        util_pct     = round(projected / cap * 100, 1) if cap > 0 else 0
+
+        result_horizons.append({
+            "label":                 h["label"],
+            "days":                  h["days"],
+            "contracts_maturing":    contracts_ct,
+            "nominal_maturing_usd":  round(nom_maturing),
+            "projected_nominal_usd": round(projected),
+            "headroom_usd":          round(headroom),
+            "utilisation_pct":       util_pct,
+        })
+
+    return {
+        "current_nominal_usd": round(current_nominal),
+        "cap_usd":             round(cap),
+        "headroom_usd":        round(cap - current_nominal),
+        "utilisation_pct":     round(current_nominal / cap * 100, 1) if cap > 0 else 0,
+        "horizons":            result_horizons,
     }
 
 
