@@ -7,8 +7,9 @@ import CSAMonitor       from './components/CSAMonitor.jsx'
 import MTMBridge        from './components/MTMBridge.jsx'
 import ScenarioAnalysis from './components/ScenarioAnalysis.jsx'
 import TopClientsTable  from './components/TopClientsTable.jsx'
-import MaturityProfile  from './components/MaturityProfile.jsx'
-import SettledTrades    from './components/SettledTrades.jsx'
+import MaturityProfile     from './components/MaturityProfile.jsx'
+import FacilityProjection from './components/FacilityProjection.jsx'
+import SettledTrades      from './components/SettledTrades.jsx'
 import HistoryChart     from './components/HistoryChart.jsx'
 import { LoaderIcon }   from 'lucide-react'
 
@@ -82,7 +83,8 @@ function Dashboard() {
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
   const { meta, facility_limits, csa_monitor, mtm_bridge,
-          scenario_analysis, top_clients, maturity_profile, settled_today } = dashData
+          scenario_analysis, top_clients, maturity_profile,
+          facility_projection, settled_today } = dashData
 
   const statusColor = {
     safe:    'bg-kuda-teal',
@@ -115,8 +117,9 @@ function Dashboard() {
         <MTMBridge       data={mtm_bridge}        />
         <ScenarioAnalysis data={scenario_analysis} />
         <TopClientsTable data={top_clients}       />
-        <MaturityProfile data={maturity_profile}  />
-        <SettledTrades   data={settled_today}     />
+        <MaturityProfile     data={maturity_profile}   />
+        <FacilityProjection  data={facility_projection} />
+        <SettledTrades       data={settled_today}       />
         <HistoryChart />
       </main>
 
