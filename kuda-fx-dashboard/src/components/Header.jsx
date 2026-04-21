@@ -9,35 +9,25 @@ export default function Header({ meta, onReset }) {
     <header className="bg-kuda-blue border-b border-kuda-bluelt sticky top-0 z-40 no-print shadow-lg">
       <div className="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
 
-        {/* Kuda brand logo */}
+        {/* Kuda brand wordmark */}
         <div className="flex items-center gap-3 shrink-0">
-          {/* Geometric horse mark — simplified polygon badge */}
-          <div className="w-9 h-9 shrink-0" aria-hidden="true">
-            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Polygon horse mark built from Kuda brand palette */}
-              <rect width="36" height="36" rx="6" fill="#195A7D"/>
-              {/* Main horse head facets */}
-              <polygon points="18,4 26,10 22,18 14,16" fill="#6BA439"/>
-              <polygon points="14,16 22,18 20,26 12,24" fill="#49762E"/>
-              <polygon points="22,18 28,14 30,22 24,24" fill="#243746"/>
-              <polygon points="24,24 30,22 28,30 22,30" fill="#195A7D"/>
-              <polygon points="12,24 20,26 18,32 10,30" fill="#6BA439"/>
-              <polygon points="18,4 26,10 30,6 24,2" fill="#BADCE6"/>
-              <polygon points="26,10 30,6 32,14 28,14" fill="#195A7D" opacity="0.7"/>
-              {/* Snout/lower accent */}
-              <polygon points="10,30 18,32 16,36 8,34" fill="#49762E"/>
-            </svg>
+          {/* K badge — Kuda Green on white, matches brand on dark bg spec */}
+          <div className="w-9 h-9 rounded-lg bg-kuda-teal flex items-center justify-center shrink-0">
+            <span
+              className="text-white font-black leading-none select-none"
+              style={{ fontFamily: "'Raleway', Arial, sans-serif", fontSize: '20px', letterSpacing: '-0.02em' }}
+            >
+              K
+            </span>
           </div>
 
           <div>
-            <div
-              className="font-bold text-white leading-none tracking-wide"
-              style={{ fontFamily: "'Raleway', sans-serif", fontSize: '15px', letterSpacing: '0.06em' }}
-            >
-              KUDA <span className="font-normal text-kuda-skyblue" style={{ fontSize: '12px', letterSpacing: '0.12em' }}>FOREIGN EXCHANGE</span>
+            <div className="leading-none" style={{ fontFamily: "'Raleway', Arial, sans-serif" }}>
+              <span className="font-black text-white" style={{ fontSize: '16px', letterSpacing: '0.08em' }}>KUDA</span>
+              <span className="font-semibold text-kuda-skyblue ml-2" style={{ fontSize: '11px', letterSpacing: '0.14em' }}>FOREIGN EXCHANGE</span>
             </div>
-            <div className="text-xs text-kuda-skyblue/70 leading-none mt-0.5 tracking-widest uppercase" style={{ fontSize: '9px' }}>
-              FX Facility Management · FYN005836
+            <div className="text-kuda-skyblue leading-none mt-1" style={{ fontSize: '9px', letterSpacing: '0.1em', opacity: 0.65 }}>
+              FX FACILITY MANAGEMENT · FYN005836
             </div>
           </div>
         </div>

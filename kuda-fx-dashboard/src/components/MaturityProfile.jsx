@@ -6,7 +6,7 @@ import {
 import { zarM, usdM } from '../utils/formatters'
 
 const BUCKET_COLORS = {
-  '0–3 months':  '#00C896',
+  '0–3 months':  '#6BA439',
   '3–6 months':  '#6366F1',
   '6–12 months': '#F59E0B',
   '>12 months':  '#EF4444',
@@ -14,7 +14,7 @@ const BUCKET_COLORS = {
 }
 
 const CCY_COLORS = {
-  USD: '#00C896',
+  USD: '#6BA439',
   GBP: '#6366F1',
   EUR: '#F59E0B',
   ZAR: '#94a3b8',

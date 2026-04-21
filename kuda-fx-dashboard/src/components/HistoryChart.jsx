@@ -73,7 +73,7 @@ export default function HistoryChart() {
     return (
       <div className="bg-kuda-navy border border-kuda-border rounded-lg p-3 text-xs shadow-xl space-y-1">
         <p className="text-slate-300 font-semibold mb-1">{d.date}</p>
-        <p className="font-mono" style={{ color: d.mtm >= 0 ? '#00C896' : '#EF4444' }}>
+        <p className="font-mono" style={{ color: d.mtm >= 0 ? '#6BA439' : '#EF4444' }}>
           MTM: {zarM(d.mtm)}
         </p>
         <p className="text-slate-400">Buffer: {zarM(d.buffer)}</p>
@@ -108,7 +108,7 @@ export default function HistoryChart() {
           label="Spot Rate"
           value={rate(latest.spot_usd_zar)}
           sub="USD/ZAR — latest"
-          color="text-amber-400"
+          color="text-kuda-skyblue"
         />
         <StatCard
           label="CSA Breach Days"
@@ -126,8 +126,8 @@ export default function HistoryChart() {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="mtmHistGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#00C896" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#00C896" stopOpacity={0.0} />
+                <stop offset="5%"  stopColor="#6BA439" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="#6BA439" stopOpacity={0.0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" vertical={false} />
@@ -137,9 +137,9 @@ export default function HistoryChart() {
             <ReferenceLine y={CSA_THRESHOLD} stroke="#EF4444" strokeDasharray="5 3" strokeOpacity={0.7}
               label={{ value: '−R15M', fill: '#EF4444', fontSize: 9, position: 'insideTopRight' }} />
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#2D4F7C' }} />
-            <Area type="monotone" dataKey="mtm" stroke="#00C896" strokeWidth={2}
+            <Area type="monotone" dataKey="mtm" stroke="#6BA439" strokeWidth={2}
               fill="url(#mtmHistGrad)" dot={false}
-              activeDot={{ r: 4, fill: '#00C896', stroke: '#0B1E3D', strokeWidth: 2 }} />
+              activeDot={{ r: 4, fill: '#6BA439', stroke: '#0B1E3D', strokeWidth: 2 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -165,7 +165,7 @@ export default function HistoryChart() {
                 <td className={`py-1.5 pr-4 ${s.buffer_zar >= 0 ? 'text-slate-400' : 'text-red-400'}`}>
                   {zarM(s.buffer_zar)}
                 </td>
-                <td className="py-1.5 pr-4 text-amber-400">{rate(s.spot_usd_zar)}</td>
+                <td className="py-1.5 pr-4 text-kuda-skyblue">{rate(s.spot_usd_zar)}</td>
                 <td className="py-1.5 pr-4 text-slate-400">{usdM(s.long_nominal_usd)}</td>
                 <td className="py-1.5 pr-4 text-slate-400">{pct(s.nominal_util_pct)}</td>
                 <td className="py-1.5 pr-4 text-slate-500">{s.settled_count ?? '—'}</td>

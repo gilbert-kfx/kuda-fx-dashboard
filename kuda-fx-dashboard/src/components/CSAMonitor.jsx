@@ -13,21 +13,19 @@ export default function CSAMonitor({ data }) {
     collateral_contact, notification_time,
   } = data
 
-  const statusColors = { safe: '#00C896', watch: '#FBBF24', warning: '#F59E0B', breach: '#EF4444' }
+  const statusColors = { safe: '#6BA439', watch: '#BADCE6', warning: '#FB923C', breach: '#EF4444' }
   const statusColor  = statusColors[status] || '#94a3b8'
 
   // Buffer bar: how far current MTM is from threshold
-  // buffer_zar = current_mtm - threshold  (e.g. 2.87M - (-15M) = 17.87M)
-  // Max buffer we show = 30M (comfortable headroom)
   const bufferPct    = Math.max(0, Math.min(100, (buffer_zar / 30_000_000) * 100))
-  const bufferColor  = buffer_zar > 10_000_000 ? '#00C896' : buffer_zar > 3_000_000 ? '#F59E0B' : '#EF4444'
+  const bufferColor  = buffer_zar > 10_000_000 ? '#6BA439' : buffer_zar > 3_000_000 ? '#FB923C' : '#EF4444'
 
   // Trigger rate distance from spot
   const spotRate = data.spot_usd_zar || 0
   const triggerDistance = trigger_rate && spotRate ? (trigger_rate - spotRate).toFixed(2) : null
   const triggerColor = !trigger_rate ? '#94a3b8'
-    : trigger_rate - spotRate > 3 ? '#00C896'
-    : trigger_rate - spotRate > 1 ? '#F59E0B'
+    : trigger_rate - spotRate > 3 ? '#6BA439'
+    : trigger_rate - spotRate > 1 ? '#FB923C'
     : '#EF4444'
 
   return (
@@ -83,7 +81,7 @@ export default function CSAMonitor({ data }) {
           label="Buffer to Threshold"
           value={zarM(buffer_zar)}
           sub={`${pct(pct_threshold_remaining)} of headroom remaining`}
-          color={buffer_zar > 10_000_000 ? '#00C896' : buffer_zar > 3_000_000 ? '#F59E0B' : '#EF4444'}
+          color={buffer_zar > 10_000_000 ? '#6BA439' : buffer_zar > 3_000_000 ? '#FB923C' : '#EF4444'}
         />
 
         {/* Sensitivity */}
@@ -112,7 +110,7 @@ export default function CSAMonitor({ data }) {
             <div className="absolute left-1/2 top-0 h-full w-0.5 bg-red-500/60" />
             <div
               className="absolute top-0 h-full rounded-full transition-all duration-700"
-              style={{ width: `${bufferPct}%`, background: `linear-gradient(90deg, #EF444440, ${bufferColor})` }}
+              style={{ width: `${bufferPct}%`, background: `linear-gradient(90deg, rgba(239,68,68,0.25), ${bufferColor})` }}
             />
             <span className="absolute left-2 top-0 h-full flex items-center text-[9px] text-red-400 font-semibold">BREACH</span>
             <span className="absolute right-2 top-0 h-full flex items-center text-[9px] text-kuda-teal font-semibold">SAFE →</span>

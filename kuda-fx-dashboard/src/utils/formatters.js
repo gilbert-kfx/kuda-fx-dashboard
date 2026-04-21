@@ -52,18 +52,18 @@ export const dateStr = (s) => {
 /** Return a Tailwind color class based on MTM vs CSA threshold. */
 export const mtmColor = (mtm, threshold = -15_000_000) => {
   if (mtm == null) return 'text-slate-400'
-  if (mtm < threshold) return 'text-red-400'
-  if (mtm < threshold * 0.5) return 'text-amber-500'
-  if (mtm < 0) return 'text-yellow-400'
+  if (mtm < threshold)       return 'text-red-400'
+  if (mtm < threshold * 0.5) return 'text-orange-400'
+  if (mtm < 0)               return 'text-slate-300'
   return 'text-kuda-teal'
 }
 
-/** Return utilisation color (teal → amber → red). */
+/** Return utilisation color (kuda-green → kuda-blue → orange → red). */
 export const utilColor = (pctUsed) => {
   if (pctUsed == null) return 'text-slate-400'
   if (pctUsed >= 100) return 'text-red-400'
-  if (pctUsed >= 80)  return 'text-amber-500'
-  if (pctUsed >= 60)  return 'text-yellow-400'
+  if (pctUsed >= 80)  return 'text-orange-400'
+  if (pctUsed >= 60)  return 'text-kuda-skyblue'
   return 'text-kuda-teal'
 }
 
@@ -71,8 +71,8 @@ export const utilColor = (pctUsed) => {
 export const utilBarColor = (pctUsed) => {
   if (pctUsed == null) return 'bg-slate-600'
   if (pctUsed >= 100) return 'bg-red-500'
-  if (pctUsed >= 80)  return 'bg-amber-500'
-  if (pctUsed >= 60)  return 'bg-yellow-400'
+  if (pctUsed >= 80)  return 'bg-orange-400'
+  if (pctUsed >= 60)  return 'bg-kuda-blue'
   return 'bg-kuda-teal'
 }
 

@@ -50,7 +50,7 @@ export default function SettledTrades({ data }) {
                     </td>
                     <td className="py-2 pr-3 text-slate-500">{t.ext_ref}</td>
                     <td className="py-2 pr-3">
-                      <span className={`pill ${t.direction === 'Sell' ? 'bg-amber-400/10 text-amber-400' : 'bg-indigo-400/10 text-indigo-400'}`}>
+                      <span className={`pill ${t.direction === 'Sell' ? 'bg-orange-400/10 text-orange-400' : 'bg-indigo-400/10 text-indigo-400'}`}>
                         {t.direction}
                       </span>
                     </td>

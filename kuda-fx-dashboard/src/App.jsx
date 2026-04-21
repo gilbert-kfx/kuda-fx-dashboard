@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Component } from 'react'
 import PasswordGate       from './components/PasswordGate.jsx'
 import Header             from './components/Header.jsx'
 import UploadPanel        from './components/UploadPanel.jsx'
@@ -17,11 +17,41 @@ import { LoaderIcon, LayoutDashboardIcon, UsersIcon } from 'lucide-react'
 /** Cache key is date-scoped so it auto-expires at midnight */
 const TODAY_KEY = () => `kuda_fx_dash_${new Date().toISOString().slice(0, 10)}`
 
+/** Catches render crashes so the whole screen doesn't go blank */
+class ErrorBoundary extends Component {
+  state = { error: null }
+  static getDerivedStateFromError(e) { return { error: e } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-kuda-navy flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+            <span className="text-red-400 text-xl">!</span>
+          </div>
+          <div>
+            <p className="text-white font-semibold mb-1">Something went wrong</p>
+            <p className="text-slate-400 text-sm max-w-sm">{this.state.error?.message}</p>
+          </div>
+          <button
+            onClick={() => { localStorage.clear(); window.location.reload() }}
+            className="btn-primary text-sm mt-2"
+          >
+            Clear cache &amp; reload
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   return (
-    <PasswordGate>
-      <Dashboard />
-    </PasswordGate>
+    <ErrorBoundary>
+      <PasswordGate>
+        <Dashboard />
+      </PasswordGate>
+    </ErrorBoundary>
   )
 }
 
@@ -85,8 +115,8 @@ function Dashboard() {
 
   const statusColor = {
     safe:    'bg-kuda-teal',
-    watch:   'bg-yellow-400',
-    warning: 'bg-amber-500',
+    watch:   'bg-kuda-blue',
+    warning: 'bg-orange-500',
     breach:  'bg-red-500',
   }[csa_monitor?.status] || 'bg-slate-600'
 
@@ -97,7 +127,7 @@ function Dashboard() {
 
       {/* CSA alert banner (only when not safe) */}
       {csa_monitor?.status && csa_monitor.status !== 'safe' && (
-        <div className={`no-print flex items-center justify-center gap-3 py-2 text-xs font-semibold text-kuda-navy ${statusColor}`}>
+        <div className={`no-print flex items-center justify-center gap-3 py-2 text-xs font-semibold text-white ${statusColor}`}>
           {csa_monitor.status === 'breach'
             ? `⚠ CSA BREACH — Kuda MTM ${zarMSimple(csa_monitor.current_mtm_kuda_zar)} is below the −R15M threshold. Collateral call required.`
             : csa_monitor.status === 'warning'

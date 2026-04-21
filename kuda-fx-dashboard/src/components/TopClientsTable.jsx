@@ -5,7 +5,7 @@ import { ChevronUpIcon, ChevronDownIcon, InfoIcon } from 'lucide-react'
 const CSA_THRESHOLD = -15_000_000
 const SCENARIO_COLORS = {
   bad:  'text-red-400',
-  warn: 'text-amber-400',
+  warn: 'text-orange-400',
   ok:   'text-kuda-teal',
   zero: 'text-slate-400',
 }
@@ -102,7 +102,7 @@ export default function TopClientsTable({ data }) {
                   const rNum   = parseFloat(r)
                   const isToday = Math.abs(rNum - current_rate) < 0.03
                   const color  = val < 0 && val < (CSA_THRESHOLD * c.share_pct / 100) ? 'text-red-400'
-                               : val < 0 ? 'text-amber-400'
+                               : val < 0 ? 'text-orange-400'
                                : val > 0 ? 'text-kuda-teal'
                                : 'text-slate-500'
                   return (

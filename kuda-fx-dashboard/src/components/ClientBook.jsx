@@ -16,7 +16,7 @@ function fmtNum(n) {
 
 const URGENCY = (days) =>
   days !== null && days <= 7  ? 'text-red-400 font-semibold' :
-  days !== null && days <= 14 ? 'text-amber-400' :
+  days !== null && days <= 14 ? 'text-orange-400' :
   'text-slate-300'
 
 const PRODUCT_BADGE = {
@@ -208,7 +208,7 @@ export default function ClientBook({ data, meta, facilityLimits }) {
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     <UpcomingChip label="7 days"   data={active.upcoming_7d}  color="border-red-500/30 text-red-300" />
-                    <UpcomingChip label="14 days"  data={active.upcoming_14d} color="border-amber-500/30 text-amber-300" />
+                    <UpcomingChip label="14 days"  data={active.upcoming_14d} color="border-kuda-blue/30 text-kuda-skyblue" />
                     <UpcomingChip label="1 month"  data={active.upcoming_30d} color="border-indigo-500/30 text-indigo-300" />
                     <UpcomingChip label="3 months" data={active.upcoming_90d} color="border-slate-500/30 text-slate-300" />
                   </div>

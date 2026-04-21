@@ -53,11 +53,13 @@ export default function PasswordGate({ children }) {
       <div className="w-full max-w-sm space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-kuda-teal/10 border border-kuda-teal/20 mb-4">
-            <span className="text-kuda-teal font-bold text-2xl">K</span>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-kuda-teal mb-4">
+            <span className="text-white font-black text-3xl" style={{ fontFamily: "'Raleway', Arial, sans-serif" }}>K</span>
           </div>
-          <h1 className="text-xl font-semibold text-white">CBC Kuda FX · Risk Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1">Facility FYN005836 · Investec Bank</p>
+          <h1 className="text-xl font-semibold text-white" style={{ fontFamily: "'Raleway', Arial, sans-serif", letterSpacing: '0.04em' }}>
+            KUDA <span className="text-kuda-skyblue font-normal text-base">FOREIGN EXCHANGE</span>
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">FX Facility Management · FYN005836</p>
         </div>
 
         {/* Password form */}

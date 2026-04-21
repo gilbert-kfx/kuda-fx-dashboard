@@ -29,8 +29,8 @@ export default function ScenarioAnalysis({ data }) {
             <AreaChart data={scenarios} onMouseLeave={() => setHovered(null)}>
               <defs>
                 <linearGradient id="mtmGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#00C896" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#00C896" stopOpacity={0.0} />
+                  <stop offset="5%"  stopColor="#6BA439" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#6BA439" stopOpacity={0.0} />
                 </linearGradient>
                 <linearGradient id="mtmGradNeg" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor="#EF4444" stopOpacity={0.0} />
@@ -62,10 +62,10 @@ export default function ScenarioAnalysis({ data }) {
               />
               <ReferenceLine
                 x={current_rate}
-                stroke="#00C896"
+                stroke="#6BA439"
                 strokeDasharray="5 3"
                 strokeOpacity={0.6}
-                label={{ value: 'Today', fill: '#00C896', fontSize: 9, position: 'top' }}
+                label={{ value: 'Today', fill: '#6BA439', fontSize: 9, position: 'top' }}
               />
               <Tooltip
                 contentStyle={{ background: '#0B1E3D', border: '1px solid #1E3A5F', borderRadius: 8, fontSize: 12 }}
@@ -76,11 +76,11 @@ export default function ScenarioAnalysis({ data }) {
               <Area
                 type="monotone"
                 dataKey="est_mtm"
-                stroke="#00C896"
+                stroke="#6BA439"
                 strokeWidth={2}
                 fill="url(#mtmGrad)"
                 dot={false}
-                activeDot={{ r: 4, fill: '#00C896', stroke: '#0B1E3D', strokeWidth: 2 }}
+                activeDot={{ r: 4, fill: '#6BA439', stroke: '#0B1E3D', strokeWidth: 2 }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -120,7 +120,7 @@ export default function ScenarioAnalysis({ data }) {
                     <td className={`text-right py-1.5 ${s.buffer >= 0 ? 'text-slate-400' : 'text-red-400'}`}>
                       {zarM(s.buffer)}
                     </td>
-                    <td className={`text-right py-1.5 ${s.move_pct > 0 ? 'text-amber-400' : s.move_pct < 0 ? 'text-kuda-teal' : 'text-slate-400'}`}>
+                    <td className={`text-right py-1.5 ${s.move_pct > 0 ? 'text-orange-400' : s.move_pct < 0 ? 'text-kuda-teal' : 'text-slate-400'}`}>
                       {s.move_pct > 0 ? '+' : ''}{s.move_pct}%
                     </td>
                   </tr>

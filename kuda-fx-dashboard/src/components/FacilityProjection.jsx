@@ -5,11 +5,17 @@ import {
 } from 'recharts'
 import { usdM } from '../utils/formatters'
 
+// Kuda brand palette — no yellows
+const KUDA_GREEN  = '#6BA439'
+const KUDA_TEAL   = '#195A7D'
+const KUDA_SKY    = '#BADCE6'
+const KUDA_OLIVE  = '#49762E'
+
 const HORIZON_COLORS = {
-  '7 days':   '#00C896',
-  '14 days':  '#22d3ee',
-  '1 month':  '#6366F1',
-  '2 months': '#F59E0B',
+  '7 days':   KUDA_GREEN,
+  '14 days':  KUDA_TEAL,
+  '1 month':  KUDA_SKY,
+  '2 months': KUDA_OLIVE,
   '3 months': '#EF4444',
 }
 
@@ -42,7 +48,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function FacilityProjection({ data }) {
   if (!data) return null
-  const { current_nominal_usd, cap_usd, headroom_usd, utilisation_pct, horizons } = data
+  const { current_nominal_usd, cap_usd, headroom_usd, utilisation_pct, horizons = [] } = data
+  if (!horizons.length) return null
 
   // Build chart data: "Today" point + 5 horizon points
   const chartData = [
@@ -67,7 +74,7 @@ export default function FacilityProjection({ data }) {
   // Colour the utilisation bar
   const utilColor =
     utilisation_pct >= 90 ? 'bg-red-500' :
-    utilisation_pct >= 75 ? 'bg-amber-400' :
+    utilisation_pct >= 75 ? 'bg-orange-400' :
     'bg-kuda-teal'
 
   return (
@@ -112,8 +119,8 @@ export default function FacilityProjection({ data }) {
           <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="nomGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#00C896" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#00C896" stopOpacity={0.03} />
+                <stop offset="5%"  stopColor="#6BA439" stopOpacity={0.25} />
+                <stop offset="95%" stopColor="#6BA439" stopOpacity={0.03} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" vertical={false} />
@@ -141,10 +148,10 @@ export default function FacilityProjection({ data }) {
             <Area
               type="monotone"
               dataKey="nominal"
-              stroke="#00C896"
+              stroke="#6BA439"
               strokeWidth={2}
               fill="url(#nomGrad)"
-              dot={{ r: 4, fill: '#00C896', strokeWidth: 0 }}
+              dot={{ r: 4, fill: '#6BA439', strokeWidth: 0 }}
               activeDot={{ r: 5 }}
             />
           </AreaChart>
@@ -156,11 +163,11 @@ export default function FacilityProjection({ data }) {
         {horizons.map((h) => {
           const nominalReleased = current_nominal_usd - h.projected_nominal_usd
           const headroomGained  = h.headroom_usd - headroom_usd
-          const hColor = HORIZON_COLORS[h.label] || '#00C896'
+          const hColor = HORIZON_COLORS[h.label] || '#6BA439'
           const utilFill =
             h.utilisation_pct >= 90 ? '#EF4444' :
-            h.utilisation_pct >= 75 ? '#F59E0B' :
-            '#00C896'
+            h.utilisation_pct >= 75 ? '#FB923C' :
+            '#6BA439'
 
           return (
             <div key={h.label} className="card space-y-3">

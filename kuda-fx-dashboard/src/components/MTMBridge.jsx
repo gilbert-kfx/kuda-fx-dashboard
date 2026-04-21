@@ -12,8 +12,8 @@ const CSA_THRESHOLD = -15_000_000
 function mtmTextColor(n) {
   if (n == null) return 'text-slate-400'
   if (n < CSA_THRESHOLD)         return 'text-red-400'
-  if (n < CSA_THRESHOLD * 0.5)   return 'text-amber-400'
-  if (n < 0)                     return 'text-yellow-300'
+  if (n < CSA_THRESHOLD * 0.5)   return 'text-orange-400'
+  if (n < 0)                     return 'text-slate-300'
   return 'text-kuda-teal'
 }
 
@@ -116,7 +116,7 @@ export default function MTMBridge({ data }) {
                       )}%`,
                       background:
                         current_mtm_kuda_zar < CSA_THRESHOLD ? '#EF4444' :
-                        current_mtm_kuda_zar < 0 ? '#F59E0B' : '#00C896',
+                        current_mtm_kuda_zar < 0 ? '#FB923C' : '#6BA439',
                     }}
                   />
                 </div>
@@ -142,8 +142,8 @@ export default function MTMBridge({ data }) {
               {/* Stale-rate warning — fires when prev & current rate are identical (CDN caching) */}
               {prev_rate != null && current_rate != null &&
                Math.abs(prev_rate - current_rate) < 0.0005 && (
-                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/25
-                                rounded-lg px-3 py-2.5 mb-3 text-xs text-amber-300">
+                <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/25
+                                rounded-lg px-3 py-2.5 mb-3 text-xs text-orange-300">
                   <AlertTriangleIcon size={13} className="shrink-0 mt-0.5" />
                   <span>
                     Yesterday's stored rate ({rate(prev_rate)}) and today's rate ({rate(current_rate)}) are
@@ -176,7 +176,7 @@ export default function MTMBridge({ data }) {
               />
 
               <AttributionRow
-                icon={<PlusCircleIcon size={14} className="text-amber-400" />}
+                icon={<PlusCircleIcon size={14} className="text-orange-400" />}
                 label="New deals & repricing"
                 sublabel="New contracts booked + forward curve repricing"
                 value={other_contribution}
@@ -212,7 +212,7 @@ function AttributionRow({ icon, label, sublabel, value, total }) {
   const totalAbs = Math.abs(total) || 1
   const barPct   = Math.min(Math.abs(value) / totalAbs * 100, 100)
   const isPos    = value >= 0
-  const barColor = isPos ? '#00C896' : '#EF4444'
+  const barColor = isPos ? '#6BA439' : '#EF4444'
 
   return (
     <div className="py-3 border-b border-kuda-border/50 last:border-0">
