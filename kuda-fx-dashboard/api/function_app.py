@@ -997,7 +997,7 @@ def _calc_mtm_bridge(
     Section 3: Day-on-day MTM bridge.
     Decomposes today's MTM vs yesterday into:
       1. Rate move contribution
-      2. Time decay (theta) — estimated residual
+      2. New deals & repricing — estimated residual (total - rate_move - settled)
       3. Settled trades (trades that matured and dropped off)
     """
     current_mtm_kuda = float(df["MTM_ZAR"].sum())
@@ -1009,7 +1009,7 @@ def _calc_mtm_bridge(
             "total_change_zar":       None,
             "rate_move_contribution": None,
             "settled_contribution":   None,
-            "theta_contribution":     None,
+            "other_contribution":     None,
             "prev_rate":              None,
             "current_rate":           round(spot, 4),
             "note": "Provide prev_mtm_zar and prev_rate for day-on-day bridge.",
@@ -1024,8 +1024,8 @@ def _calc_mtm_bridge(
     settled = df[df["MATURITY_DATE"].dt.normalize() == today]
     settled_contribution = float(settled["MTM_ZAR"].sum())
 
-    # Residual is time decay / theta
-    theta = total_change - rate_move - settled_contribution
+    # "Other" = residual: new trades booked + repricing + anything not explained by rate move or settlements
+    other = total_change - rate_move - settled_contribution
 
     return {
         "current_mtm_kuda_zar":    round(current_mtm_kuda),
@@ -1033,10 +1033,10 @@ def _calc_mtm_bridge(
         "total_change_zar":        round(total_change),
         "rate_move_contribution":  round(rate_move),
         "settled_contribution":    round(settled_contribution),
-        "theta_contribution":      round(theta),
+        "other_contribution":      round(other),
         "prev_rate":               round(prev_rate, 4),
         "current_rate":            round(spot, 4),
-        "settled_trade_count":     len(settled),
+        "settled_trade_count":     int(len(settled)),
     }
 
 
