@@ -15,10 +15,12 @@ export default function HistoryChart() {
 
   useEffect(() => {
     fetch('/api/history?days=90')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : { snapshots: [] })
       .then(d => {
-        // Sort oldest first for charting
-        const sorted = (d.snapshots || []).sort((a, b) => a.date.localeCompare(b.date))
+        // Filter out any snapshots with missing dates, then sort oldest first
+        const sorted = (d.snapshots || [])
+          .filter(s => s && s.date)
+          .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
         setSnapshots(sorted)
         setLoading(false)
       })
@@ -50,7 +52,7 @@ export default function HistoryChart() {
   // Chart data
   const chartData = snapshots.map(s => ({
     date:        s.date,
-    label:       s.date.slice(5),  // MM-DD
+    label:       s.date ? s.date.slice(5) : '—',  // MM-DD
     mtm:         s.mtm_zar,
     buffer:      s.buffer_zar,
     spot:        s.spot_usd_zar,

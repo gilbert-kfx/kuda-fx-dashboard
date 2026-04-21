@@ -33,7 +33,7 @@ export default function TopClientsTable({ data }) {
   }
 
   // Pick which scenario rate columns to display
-  const ratesToShow = display_rates.slice(0, 7)
+  const ratesToShow = (display_rates || []).slice(0, 7)
 
   return (
     <section>
