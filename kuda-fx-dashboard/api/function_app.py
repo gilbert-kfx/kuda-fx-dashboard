@@ -123,6 +123,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
             "maturity_profile":   _calc_maturity_profile(df),
             "facility_projection": _calc_facility_projection(df, fac_limits.get("dealing_cap_usd")),
             "settled_today":      _calc_settled_today(df),
+            "client_book":        _calc_client_book(df),
         }
 
         # ── Save snapshot to blob storage (if configured) ─────────────────────
@@ -1293,6 +1294,83 @@ def _calc_settled_today(df: pd.DataFrame) -> dict:
         "total_mtm":  round(sum(r["mtm_zar"] for r in rows)),
         "trades":     rows,
     }
+
+
+def _calc_client_book(df: pd.DataFrame) -> dict:
+    """
+    Client Book: per-client detailed trade listing used for mailer generation.
+    Returns all clients sorted by gross nominal, each with a full trade list
+    and pre-computed upcoming maturity buckets.
+    """
+    today    = pd.Timestamp.today().normalize()
+    pt_col   = "PRODUCT_TYPE" if "PRODUCT_TYPE" in df.columns else "PRODUCT"
+    FEC_TYPES = ["FORWARD", "DRAWDOWN", "EXTENSION"]
+    OPT_TYPES = ["Vanilla", "Forward Enhancer"]
+    ACTIVE    = FEC_TYPES + OPT_TYPES
+
+    clients = []
+    for client_name, cdf in df.groupby("CLIENT_NAME"):
+        pt_vals = cdf[pt_col].str.strip()
+
+        # Active long trades (same definition as nominal calc — excludes CANCELLATION)
+        active_mask = (
+            pt_vals.isin(ACTIVE)
+            & (cdf["NOMINAL_USD"] > 0)
+            & cdf["MATURITY_DATE"].notna()
+        )
+        active = cdf[active_mask].copy()
+        active["days_to_maturity"] = (active["MATURITY_DATE"] - today).dt.days
+
+        long_nominal = float(active["NOMINAL_USD"].sum())
+        net_mtm      = float(cdf["MTM_ZAR"].sum())
+        gross_nom    = float(cdf["NOMINAL_USD"].abs().sum())
+
+        def upcoming(days_limit):
+            mask = (
+                active["days_to_maturity"] >= 0
+            ) & (
+                active["days_to_maturity"] <= days_limit
+            )
+            return {
+                "count":       int(mask.sum()),
+                "nominal_usd": round(float(active.loc[mask, "NOMINAL_USD"].sum())),
+            }
+
+        # Build trade rows (all trades, sorted by maturity ascending)
+        trade_rows = []
+        for _, r in cdf.sort_values("MATURITY_DATE").iterrows():
+            mat = r.get("MATURITY_DATE")
+            trd = r.get("TRADE_DATE")
+            days = int((mat - today).days) if pd.notna(mat) else None
+            trade_rows.append({
+                "product_type":     str(r.get(pt_col, "")).strip(),
+                "ccy_pair":         str(r.get("CCY_PAIR", "")).strip(),
+                "import_export":    str(r.get("IMPORT_EXPORT", "")).strip(),
+                "direction_client": str(r.get("DIRECTION_CLIENT", "")).strip(),
+                "notional_fcy":     round(float(r.get("NOTIONAL_FCY", 0))),
+                "deal_rate":        round(float(r.get("DEAL_RATE", 0)), 4),
+                "trade_date":       trd.strftime("%Y-%m-%d") if pd.notna(trd) else "",
+                "maturity_date":    mat.strftime("%Y-%m-%d") if pd.notna(mat) else "",
+                "days_to_maturity": days,
+                "mtm_zar":          round(float(r.get("MTM_ZAR", 0))),
+                "nominal_usd":      round(float(r.get("NOMINAL_USD", 0))),
+            })
+
+        clients.append({
+            "name":              client_name,
+            "trade_count":       int(len(cdf)),
+            "long_nominal_usd":  round(long_nominal),
+            "gross_nominal_usd": round(gross_nom),
+            "net_mtm_zar":       round(net_mtm),
+            "upcoming_7d":       upcoming(7),
+            "upcoming_14d":      upcoming(14),
+            "upcoming_30d":      upcoming(30),
+            "upcoming_90d":      upcoming(90),
+            "trades":            trade_rows,
+        })
+
+    clients.sort(key=lambda c: c["gross_nominal_usd"], reverse=True)
+    return {"clients": clients}
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
