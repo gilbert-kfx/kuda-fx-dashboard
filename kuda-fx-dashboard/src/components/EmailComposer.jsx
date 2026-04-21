@@ -280,7 +280,7 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
   const utilCol = !utilPct ? TXT_DARK : utilPct > 90 ? RED : utilPct > 75 ? AMBER : KUDA_GREEN
   const facilityHtml = dealingCap ? `
     <table width="100%" cellpadding="0" cellspacing="0" border="0">
-      ${sectionTitle('Facility Summary — Investec Bank FYN005836')}
+      ${sectionTitle('Facility Summary')}
       <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${BRD_LIGHT};">
           <tr>
@@ -401,7 +401,7 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
   <!-- ═══ FOOTER ═══ -->
   <tr bgcolor="${KUDA_NAVY}">
     <td align="center" style="padding:14px 28px;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
-      <p style="margin:0 0 3px;font-size:10px;"><font color="${KUDA_SKY}">CBC Kuda Foreign Exchange (Pty) Ltd &nbsp;·&nbsp; FSP 46310 &nbsp;·&nbsp; Investec Bank Facility FYN005836</font></p>
+      <p style="margin:0 0 3px;font-size:10px;"><font color="${KUDA_SKY}">CBC Kuda Foreign Exchange (Pty) Ltd &nbsp;·&nbsp; FSP 46310</font></p>
       <p style="margin:0;font-size:9px;"><font color="#475569">This communication is confidential and intended solely for the named recipient. Market commentary is for informational purposes only and does not constitute financial advice.</font></p>
     </td>
   </tr>
