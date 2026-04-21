@@ -41,7 +41,7 @@
            focus:ring-1 focus:ring-kuda-teal/30 transition w-full font-mono;
   }
   .btn-primary {
-    @apply flex items-center gap-2 bg-kuda-teal hover:bg-kuda-teallt text-kuda-navy
+    @apply flex items-center gap-2 bg-kuda-teal hover:bg-kuda-teallt text-white
            font-semibold text-sm px-4 py-2 rounded-lg transition-colors cursor-pointer;
   }
   .btn-ghost {

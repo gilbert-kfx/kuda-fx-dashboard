@@ -5,11 +5,21 @@ export default {
     extend: {
       colors: {
         kuda: {
-          navy:    '#0B1E3D',
-          navylt:  '#112347',
-          navymid: '#1A3260',
-          teal:    '#00C896',
-          teallt:  '#00E5AD',
+          // Dark screen backgrounds
+          navy:    '#0D1B2A',
+          navylt:  '#162436',
+          navymid: '#1E3248',
+          // Brand greens — primary accent (Kuda Green P 7737 C)
+          teal:    '#6BA439',
+          teallt:  '#7BBF47',
+          // Kuda Teal brand blue (P 7700 C) — headers, structure
+          blue:    '#195A7D',
+          bluelt:  '#1E6E97',
+          // Kuda secondary palette
+          olive:   '#49762E',
+          skyblue: '#BADCE6',
+          navy2:   '#243746',   // exact Kuda Navy brand colour
+          // Utility
           amber:   '#F59E0B',
           red:     '#EF4444',
           slate:   '#1E293B',

@@ -108,7 +108,7 @@ function Dashboard() {
       )}
 
       {/* ── Tab nav ─────────────────────────────────────────────────────── */}
-      <div className="border-b border-kuda-border bg-kuda-navylt no-print">
+      <div className="border-b border-kuda-border bg-kuda-navy no-print">
         <div className="max-w-screen-2xl mx-auto px-4 md:px-6 flex items-center gap-1">
           <TabBtn
             active={tab === 'dashboard'}
@@ -161,7 +161,7 @@ function Dashboard() {
 
       {/* Footer */}
       <footer className="border-t border-kuda-border mt-8 py-4 px-6 text-center text-xs text-slate-600">
-        CBC Kuda Foreign Exchange (Pty) Ltd · Investec Bank Facility FYN005836 ·
+        CBC Kuda Foreign Exchange (Pty) Ltd · FX Facility Management · Investec Bank FYN005836 ·
         Data sourced from FXFlow · Generated {new Date(meta.generated_at).toLocaleString('en-ZA')}
       </footer>
     </div>

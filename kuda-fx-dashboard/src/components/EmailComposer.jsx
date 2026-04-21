@@ -32,15 +32,20 @@ function fmtRate(n) {
 // ─── Email HTML builder ───────────────────────────────────────────────────────
 
 function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar, senderName, mtmDate, dealingCap }) {
-  const S   = '#0B1E3D'    // kuda-navy
-  const SLT = '#0F2142'    // kuda-navylt
-  const BRD = '#1E3A5F'    // kuda-border
-  const TEL = '#00C896'    // kuda-teal
-  const RED = '#EF4444'
-  const SL4 = '#94a3b8'    // slate-400
-  const SL5 = '#64748b'    // slate-500
-  const WHT = '#ffffff'
-  const LGT = '#f8fafc'    // light bg
+  // ── Kuda Brand Palette ────────────────────────────────────────────────────
+  const KUDA_TEAL   = '#195A7D'   // Kuda Teal P 7700 C — header / structure
+  const KUDA_GREEN  = '#6BA439'   // Kuda Green P 7737 C — positive / accent
+  const KUDA_OLIVE  = '#49762E'   // Kuda Olive P 364 C
+  const KUDA_NAVY   = '#243746'   // Kuda Navy P 7546 C
+  const KUDA_SKY    = '#BADCE6'   // Kuda Sky Blue P 7457 C
+  const RED         = '#B91C1C'   // danger red (accessible on white)
+  const AMBER       = '#B45309'   // warning amber
+  const WHT         = '#ffffff'
+  const TXT_DARK    = '#1e293b'   // body text
+  const TXT_MID     = '#475569'   // secondary text
+  const TXT_LIGHT   = '#94a3b8'   // muted text
+  const BG_LIGHT    = '#f8fafc'   // alternating row
+  const BRD_LIGHT   = '#e2e8f0'   // light border
 
   // Combine all trades across all selected clients
   const allTrades = clients.flatMap(c =>
@@ -82,88 +87,108 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
     .map(([,v]) => v)
     .slice(0, 6)  // show 6 months
 
-  // ── CSS shared ────────────────────────────────────────────────────────────
-  const tdBase = `padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:11px;`
-  const thBase = `padding:6px 8px;font-size:10px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.04em;border-bottom:2px solid #cbd5e1;background:#f0f4f8;`
-
-  const sectionTitle = (title) => `
-    <tr><td colspan="99" style="padding:20px 0 8px;">
-      <div style="border-left:3px solid ${TEL};padding-left:10px;">
-        <p style="margin:0;font-size:13px;font-weight:700;color:#1e293b;text-transform:uppercase;letter-spacing:0.05em;">${title}</p>
-      </div>
-    </td></tr>`
-
-  const mtmFmt = (n) => {
-    const abs = Math.abs(n)
-    const sign = n >= 0 ? '+' : '-'
-    const col = n >= 0 ? '#00856a' : '#c0392b'
-    const s = abs >= 1e6 ? `${sign}R${(abs/1e6).toFixed(2)}M` : abs >= 1e3 ? `${sign}R${(abs/1e3).toFixed(0)}K` : `${sign}R${Math.round(abs)}`
-    return `<span style="color:${col};font-weight:600;">${s}</span>`
-  }
+  // ── Outlook-safe helpers ──────────────────────────────────────────────────
+  // NOTE: Every <td> with a bg color must carry BOTH bgcolor="" attr AND style="background-color:"
+  // Text colors must be on the direct container, not a parent div.
 
   const nomFmt = (n) => {
-    const abs = Math.abs(n)
-    const s = abs >= 1e6 ? `$${(abs/1e6).toFixed(2)}M` : abs >= 1e3 ? `$${(abs/1e3).toFixed(0)}K` : `$${Math.round(abs)}`
-    return s
+    const abs = Math.abs(n || 0)
+    if (abs >= 1e6) return `$${(abs/1e6).toFixed(2)}M`
+    if (abs >= 1e3) return `$${(abs/1e3).toFixed(0)}K`
+    return `$${Math.round(abs)}`
   }
 
-  // ── Trade table builder ───────────────────────────────────────────────────
+  const mtmFmt = (n) => {
+    if (n == null) return '—'
+    const abs = Math.abs(n)
+    const sign = n >= 0 ? '+' : '-'
+    const col  = n >= 0 ? KUDA_GREEN : RED
+    const s = abs >= 1e6 ? `${sign}R${(abs/1e6).toFixed(2)}M` : abs >= 1e3 ? `${sign}R${(abs/1e3).toFixed(0)}K` : `${sign}R${Math.round(abs)}`
+    // Use <font> tag — most reliable across Outlook versions
+    return `<font color="${col}"><b>${s}</b></font>`
+  }
+
+  // Section heading: uses a Kuda Teal left-border bar (table-cell trick, not CSS border-left which Outlook strips)
+  const sectionTitle = (title) => `
+    <tr>
+      <td colspan="99" style="padding:22px 0 8px 0;" bgcolor="#ffffff">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td width="4" style="background-color:${KUDA_GREEN};font-size:1px;line-height:1px;" bgcolor="${KUDA_GREEN}">&nbsp;</td>
+            <td style="padding:6px 0 6px 10px;background-color:#ffffff;" bgcolor="#ffffff">
+              <font color="${TXT_DARK}"><b style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;">${title}</b></font>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>`
+
+  // ── Trade table ───────────────────────────────────────────────────────────
   const tradeTable = (rows, showEntity = false) => {
-    if (!rows.length) return `<p style="color:#94a3b8;font-size:12px;padding:8px 0;">No open contracts in this category.</p>`
+    if (!rows.length) return `<p style="color:${TXT_LIGHT};font-size:12px;padding:8px 0;">No open contracts in this category.</p>`
     const headers = [
       ...(showEntity ? ['Entity'] : []),
-      'Type','Currency','Direction','Notional','Deal Rate','Trade Date','Maturity','Days','MTM (ZAR)'
+      'Type','Currency','Dir.','Notional','Deal Rate','Trade Date','Maturity','Days','MTM (ZAR)'
     ]
-    return `
-    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      <thead><tr>${headers.map(h => `<th style="${thBase}text-align:${['Notional','Deal Rate','Days','MTM (ZAR)'].includes(h)?'right':'left'}">${h}</th>`).join('')}</tr></thead>
-      <tbody>${rows.map((t,i) => {
-        const bg = i%2===0?'#ffffff':'#f8fafc'
-        const urg = t.days_to_maturity<=7?'color:#c0392b;font-weight:700;':t.days_to_maturity<=14?'color:#d97706;':''
-        return `<tr style="background:${bg};">
-          ${showEntity ? `<td style="${tdBase}font-weight:600;color:#334155;">${t.entity}</td>` : ''}
-          <td style="${tdBase}"><span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;text-transform:uppercase;">${t.product_type}</span></td>
-          <td style="${tdBase}font-weight:700;color:#1e293b;">${t.ccy_pair}</td>
-          <td style="${tdBase}">${t.direction_client}</td>
-          <td style="${tdBase}text-align:right;font-family:monospace;">${fmtNum(t.notional_fcy)}</td>
-          <td style="${tdBase}text-align:right;font-family:monospace;">${fmtRate(t.deal_rate)}</td>
-          <td style="${tdBase};color:#64748b;">${fmtDate(t.trade_date)}</td>
-          <td style="${tdBase}text-align:right;${urg}">${fmtDate(t.maturity_date)}</td>
-          <td style="${tdBase}text-align:right;${urg}">${t.days_to_maturity}</td>
-          <td style="${tdBase}text-align:right;">${mtmFmt(t.mtm_zar)}</td>
-        </tr>`
-      }).join('')}
-      <tr style="background:#f0fdf4;border-top:2px solid #86efac;">
-        <td colspan="${headers.length - 1}" style="padding:6px 8px;font-size:11px;font-weight:700;color:#166534;">Total</td>
-        <td style="padding:6px 8px;text-align:right;font-size:11px;">${mtmFmt(rows.reduce((s,t)=>s+t.mtm_zar,0))}</td>
-      </tr>
+    const RIGHT_COLS = new Set(['Notional','Deal Rate','Days','MTM (ZAR)'])
+    const thStyle = `padding:7px 8px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;border-bottom:2px solid ${KUDA_TEAL};background-color:${KUDA_NAVY};color:${KUDA_SKY};`
+    const tdS = `padding:5px 8px;border-bottom:1px solid ${BRD_LIGHT};font-size:11px;font-family:Arial,sans-serif;`
+
+    return `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <thead><tr bgcolor="${KUDA_NAVY}">
+        ${headers.map(h => `<th align="${RIGHT_COLS.has(h)?'right':'left'}" style="${thStyle}color:${KUDA_SKY};"><font color="${KUDA_SKY}">${h}</font></th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${rows.map((t,i) => {
+          const bg  = i%2===0 ? '#ffffff' : BG_LIGHT
+          const urgCol = t.days_to_maturity<=7 ? RED : t.days_to_maturity<=14 ? AMBER : TXT_DARK
+          return `<tr bgcolor="${bg}">
+            ${showEntity ? `<td style="${tdS}" bgcolor="${bg}"><font color="${TXT_DARK}"><b>${t.entity}</b></font></td>` : ''}
+            <td style="${tdS}" bgcolor="${bg}">
+              <font color="${KUDA_TEAL}"><b style="font-size:9px;text-transform:uppercase;">${t.product_type}</b></font>
+            </td>
+            <td style="${tdS}" bgcolor="${bg}"><font color="${TXT_DARK}"><b>${t.ccy_pair}</b></font></td>
+            <td style="${tdS}" bgcolor="${bg}"><font color="${TXT_MID}">${t.direction_client}</font></td>
+            <td align="right" style="${tdS}font-family:Courier New,monospace;" bgcolor="${bg}"><font color="${TXT_DARK}">${fmtNum(t.notional_fcy)}</font></td>
+            <td align="right" style="${tdS}font-family:Courier New,monospace;" bgcolor="${bg}"><font color="${TXT_DARK}">${fmtRate(t.deal_rate)}</font></td>
+            <td style="${tdS}" bgcolor="${bg}"><font color="${TXT_LIGHT}">${fmtDate(t.trade_date)}</font></td>
+            <td align="right" style="${tdS}font-family:Courier New,monospace;" bgcolor="${bg}"><font color="${urgCol}"><b>${fmtDate(t.maturity_date)}</b></font></td>
+            <td align="right" style="${tdS}" bgcolor="${bg}"><font color="${urgCol}"><b>${t.days_to_maturity ?? '—'}</b></font></td>
+            <td align="right" style="${tdS}" bgcolor="${bg}">${mtmFmt(t.mtm_zar)}</td>
+          </tr>`
+        }).join('')}
+        <tr bgcolor="#EEF7E6">
+          <td colspan="${headers.length - 1}" style="padding:7px 8px;font-size:11px;font-weight:bold;" bgcolor="#EEF7E6">
+            <font color="${KUDA_OLIVE}"><b>TOTAL</b></font>
+          </td>
+          <td align="right" style="padding:7px 8px;font-size:11px;" bgcolor="#EEF7E6">
+            ${mtmFmt(rows.reduce((s,t)=>s+(t.mtm_zar||0),0))}
+          </td>
+        </tr>
       </tbody>
     </table>`
   }
 
-  // ── Commentary section ────────────────────────────────────────────────────
+  // ── Commentary ────────────────────────────────────────────────────────────
   const commentaryHtml = commentary?.articles?.length ? `
-    <table width="100%" cellpadding="0" cellspacing="0">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
       ${sectionTitle('ZAR Market Update')}
-      <tr><td colspan="99" style="padding:0 0 20px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;overflow:hidden;">
-          ${commentary.articles.slice(0, 5).map(a => `
-          <tr style="border-bottom:1px solid #bae6fd;">
-            <td style="padding:10px 14px;">
-              <div style="display:flex;align-items:flex-start;gap:8px;">
-                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#0284c7;margin-top:5px;flex-shrink:0;"></span>
-                <div>
-                  <p style="margin:0 0 3px;font-size:12px;font-weight:600;color:#0c4a6e;">
-                    ${a.link ? `<a href="${a.link}" style="color:#0284c7;text-decoration:none;">${a.title}</a>` : a.title}
-                  </p>
-                  ${a.summary ? `<p style="margin:0;font-size:11px;color:#334155;line-height:1.5;">${a.summary.slice(0,220)}${a.summary.length>220?'…':''}</p>` : ''}
-                  <p style="margin:3px 0 0;font-size:9px;color:#64748b;">${a.source}${a.pub ? ' · ' + new Date(a.pub).toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'}) : ''}</p>
-                </div>
-              </div>
-            </td>
-          </tr>`).join('')}
+      <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${KUDA_SKY};">
+          ${commentary.articles.slice(0, 5).map((a,i) => {
+            const bg = i%2===0 ? '#F0F7FB' : '#ffffff'
+            return `<tr bgcolor="${bg}"><td style="padding:10px 14px;border-bottom:1px solid ${KUDA_SKY};" bgcolor="${bg}">
+              <p style="margin:0 0 3px;font-size:12px;">
+                ${a.link
+                  ? `<a href="${a.link}" style="color:${KUDA_TEAL};text-decoration:none;font-weight:bold;">${a.title}</a>`
+                  : `<font color="${KUDA_TEAL}"><b>${a.title}</b></font>`}
+              </p>
+              ${a.summary ? `<p style="margin:0 0 4px;font-size:11px;color:${TXT_MID};line-height:1.5;"><font color="${TXT_MID}">${a.summary.slice(0,240)}${a.summary.length>240?'…':''}</font></p>` : ''}
+              <p style="margin:0;font-size:9px;"><font color="${TXT_LIGHT}">${a.source}${a.pub ? ' · ' + new Date(a.pub).toLocaleDateString('en-ZA',{day:'2-digit',month:'short',year:'numeric'}) : ''}</font></p>
+            </td></tr>`
+          }).join('')}
         </table>
-        <p style="margin:6px 0 0;font-size:9px;color:#94a3b8;">Market news sourced from public feeds. Not financial advice.</p>
+        <p style="margin:5px 0 0;font-size:9px;"><font color="${TXT_LIGHT}">Market news sourced from public feeds. Not financial advice.</font></p>
       </td></tr>
     </table>` : ''
 
@@ -173,165 +198,185 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
     const imports = clientTrades.filter(t => t.import_export?.toLowerCase() === 'import')
     const exports = clientTrades.filter(t => t.import_export?.toLowerCase() === 'export')
     const other   = clientTrades.filter(t => !['import','export'].includes(t.import_export?.toLowerCase()))
-
-    const groups = [
+    const groups  = [
       ...(imports.length || !exports.length ? [{ label: `${client.name} — Import Book`, rows: imports.length ? imports : other }] : []),
       ...(exports.length ? [{ label: `${client.name} — Export Book`, rows: exports }] : []),
     ]
-
     const clientOrders = openOrders[client.name] || ''
+    const mtmColor = client.net_mtm_zar >= 0 ? KUDA_GREEN : RED
 
     return `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
-      <!-- Entity divider -->
-      <tr><td colspan="99" style="padding:16px 0 4px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:6px;overflow:hidden;">
-          <tr>
-            <td style="padding:10px 16px;">
-              <p style="margin:0;font-size:14px;font-weight:700;color:${WHT};">${client.name}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+      <!-- Entity header bar -->
+      <tr><td colspan="99" style="padding:16px 0 4px;" bgcolor="#ffffff">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr bgcolor="${KUDA_TEAL}">
+            <td style="padding:10px 16px;background-color:${KUDA_TEAL};" bgcolor="${KUDA_TEAL}">
+              <font color="${WHT}"><b style="font-size:14px;">${client.name}</b></font>
             </td>
-            <td style="padding:10px 16px;text-align:right;">
-              <span style="font-size:11px;color:${SL4};margin-right:16px;">${client.trade_count} contracts</span>
-              <span style="font-size:11px;color:${SL4};margin-right:16px;">Long: ${nomFmt(client.long_nominal_usd)}</span>
-              <span style="font-size:11px;${client.net_mtm_zar>=0?`color:${TEL}`:`color:${RED}`}">MTM: ${mtmFmt(client.net_mtm_zar)}</span>
+            <td align="right" style="padding:10px 16px;background-color:${KUDA_TEAL};" bgcolor="${KUDA_TEAL}">
+              <font color="${KUDA_SKY}" style="font-size:11px;">${client.trade_count} contracts &nbsp;·&nbsp; Long: ${nomFmt(client.long_nominal_usd)} &nbsp;·&nbsp; MTM: </font><font color="${mtmColor}"><b>${client.net_mtm_zar >= 0 ? '+' : ''}${nomFmt(Math.abs(client.net_mtm_zar))}</b></font>
             </td>
           </tr>
         </table>
       </td></tr>
 
       ${groups.map(g => `
-      ${sectionTitle(g.label)}
-      <tr><td colspan="99" style="padding:0 0 16px;">${tradeTable(g.rows)}</td></tr>`).join('')}
+        ${sectionTitle(g.label)}
+        <tr><td colspan="99" style="padding:0 0 16px 0;" bgcolor="#ffffff">${tradeTable(g.rows)}</td></tr>
+      `).join('')}
 
       ${clientOrders ? `
-      ${sectionTitle(`Open Firm Orders — ${client.name}`)}
-      <tr><td colspan="99" style="padding:0 0 16px;">
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;">
-          <pre style="margin:0;font-size:12px;color:#78350f;font-family:Arial,sans-serif;white-space:pre-wrap;">${clientOrders}</pre>
-        </div>
-      </td></tr>` : ''}
+        ${sectionTitle(`Open Firm Orders — ${client.name}`)}
+        <tr><td colspan="99" style="padding:0 0 16px 0;" bgcolor="#ffffff">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #FDE68A;">
+            <tr bgcolor="#FFFBEB"><td style="padding:12px 16px;background-color:#FFFBEB;" bgcolor="#FFFBEB">
+              <pre style="margin:0;font-size:12px;font-family:Courier New,monospace;white-space:pre-wrap;"><font color="#78350F">${clientOrders}</font></pre>
+            </td></tr>
+          </table>
+        </td></tr>` : ''}
     </table>`
   }).join('')
 
   // ── Upcoming contracts ────────────────────────────────────────────────────
   const upcomingHtml = upcoming90.length ? `
-    <table width="100%" cellpadding="0" cellspacing="0">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
       ${sectionTitle('Upcoming Contracts — Next 90 Days')}
-      <tr><td colspan="99" style="padding:0 0 20px;">
+      <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
         ${tradeTable(upcoming90, clients.length > 1)}
       </td></tr>
     </table>` : ''
 
   // ── Cash flow schedule ────────────────────────────────────────────────────
+  const thCF = `padding:7px 8px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.04em;border-bottom:2px solid ${KUDA_TEAL};background-color:${KUDA_NAVY};color:${KUDA_SKY};`
   const cfHtml = cashFlows.length ? `
-    <table width="100%" cellpadding="0" cellspacing="0">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
       ${sectionTitle('Upcoming Cash Flow Schedule')}
-      <tr><td colspan="99" style="padding:0 0 20px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-          <thead><tr>
-            <th style="${thBase}text-align:left;">Month</th>
-            <th style="${thBase}text-align:right;">Contracts</th>
-            <th style="${thBase}text-align:right;">Total USD Nominal</th>
-            <th style="${thBase}text-align:right;">ZAR Equivalent</th>
+      <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+          <thead><tr bgcolor="${KUDA_NAVY}">
+            <th align="left"  style="${thCF}"><font color="${KUDA_SKY}">Month</font></th>
+            <th align="right" style="${thCF}"><font color="${KUDA_SKY}">Contracts</font></th>
+            <th align="right" style="${thCF}"><font color="${KUDA_SKY}">USD Nominal</font></th>
+            <th align="right" style="${thCF}"><font color="${KUDA_SKY}">ZAR Equivalent</font></th>
           </tr></thead>
-          <tbody>${cashFlows.map((cf,i) => {
-            const zarEq = spot ? cf.nominal * spot : null
-            return `<tr style="background:${i%2===0?'#ffffff':'#f8fafc'};">
-              <td style="${tdBase}font-weight:600;color:#1e293b;">${cf.label}</td>
-              <td style="${tdBase}text-align:right;">${cf.trades.length}</td>
-              <td style="${tdBase}text-align:right;font-family:monospace;">${nomFmt(cf.nominal)}</td>
-              <td style="${tdBase}text-align:right;font-family:monospace;">${zarEq ? `R${Math.round(zarEq).toLocaleString('en-ZA')}` : '—'}</td>
-            </tr>`
-          }).join('')}
+          <tbody>
+            ${cashFlows.map((cf,i) => {
+              const bg = i%2===0 ? '#ffffff' : BG_LIGHT
+              const zarEq = spot ? cf.nominal * spot : null
+              return `<tr bgcolor="${bg}">
+                <td style="padding:6px 8px;border-bottom:1px solid ${BRD_LIGHT};font-weight:bold;font-size:12px;" bgcolor="${bg}"><font color="${TXT_DARK}"><b>${cf.label}</b></font></td>
+                <td align="right" style="padding:6px 8px;border-bottom:1px solid ${BRD_LIGHT};font-size:11px;" bgcolor="${bg}"><font color="${TXT_DARK}">${cf.trades.length}</font></td>
+                <td align="right" style="padding:6px 8px;border-bottom:1px solid ${BRD_LIGHT};font-size:11px;font-family:Courier New,monospace;" bgcolor="${bg}"><font color="${TXT_DARK}">${nomFmt(cf.nominal)}</font></td>
+                <td align="right" style="padding:6px 8px;border-bottom:1px solid ${BRD_LIGHT};font-size:11px;font-family:Courier New,monospace;" bgcolor="${bg}"><font color="${TXT_DARK}">${zarEq ? `R${Math.round(zarEq).toLocaleString('en-ZA')}` : '—'}</font></td>
+              </tr>`
+            }).join('')}
           </tbody>
         </table>
       </td></tr>
     </table>` : ''
 
   // ── Facility summary ──────────────────────────────────────────────────────
+  const utilCol = !utilPct ? TXT_DARK : utilPct > 90 ? RED : utilPct > 75 ? AMBER : KUDA_GREEN
   const facilityHtml = dealingCap ? `
-    <table width="100%" cellpadding="0" cellspacing="0">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
       ${sectionTitle('Facility Summary — Investec Bank FYN005836')}
-      <tr><td colspan="99" style="padding:0 0 20px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">
+      <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${BRD_LIGHT};">
           <tr>
-            <td style="padding:12px 16px;border-right:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:10px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Open Nominal</div>
-              <div style="font-size:18px;font-weight:700;color:#1e293b;">${nomFmt(totalNominal)}</div>
+            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
+              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Open Nominal</font></p>
+              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${KUDA_TEAL}"><b>${nomFmt(totalNominal)}</b></font></p>
             </td>
-            <td style="padding:12px 16px;border-right:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:10px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Dealing Cap</div>
-              <div style="font-size:18px;font-weight:700;color:#1e293b;">${nomFmt(dealingCap)}</div>
+            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
+              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Dealing Cap</font></p>
+              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${TXT_DARK}"><b>${nomFmt(dealingCap)}</b></font></p>
             </td>
-            <td style="padding:12px 16px;border-right:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:10px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Utilisation</div>
-              <div style="font-size:18px;font-weight:700;color:${utilPct>90?'#c0392b':utilPct>75?'#d97706':'#166534'};">${utilPct}%</div>
+            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
+              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Utilisation</font></p>
+              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${utilCol}"><b>${utilPct ?? '—'}%</b></font></p>
             </td>
-            <td style="padding:12px 16px;text-align:center;">
-              <div style="font-size:10px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Headroom</div>
-              <div style="font-size:18px;font-weight:700;color:#166534;">${nomFmt(dealingCap - totalNominal)}</div>
+            <td align="center" style="padding:14px 16px;background-color:#F8FAFC;" bgcolor="#F8FAFC">
+              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Headroom</font></p>
+              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${KUDA_GREEN}"><b>${nomFmt(dealingCap - totalNominal)}</b></font></p>
             </td>
           </tr>
         </table>
       </td></tr>
     </table>` : ''
 
+  // ── Build final HTML ──────────────────────────────────────────────────────
   const clientNames = clients.map(c => c.name).join(' & ')
-  const weekStr = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })
+  const weekStr     = new Date().toLocaleDateString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric' })
 
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/></head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:20px 0;">
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kuda FX Weekly Update</title>
+</head>
+<body style="margin:0;padding:0;background-color:#F1F5F9;font-family:Arial,Helvetica,sans-serif;" bgcolor="#F1F5F9">
+
+<table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F1F5F9" style="background-color:#F1F5F9;padding:24px 0;">
 <tr><td align="center">
-<table width="700" cellpadding="0" cellspacing="0"
-       style="max-width:700px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
 
-  <!-- Header -->
-  <tr><td style="background:#0B1E3D;padding:20px 28px;">
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td>
-          <div style="color:#00C896;font-size:22px;font-weight:800;letter-spacing:0.02em;">CBC Kuda FX</div>
-          <div style="color:#94a3b8;font-size:11px;margin-top:2px;">Authorised Financial Services Provider · FSP 46310</div>
-        </td>
-        <td align="right" style="color:#64748b;font-size:11px;text-align:right;">
-          <div>Weekly FX Position Update</div>
-          <div style="margin-top:3px;">${weekStr}</div>
-          ${spot ? `<div style="margin-top:3px;color:#94a3b8;">USD/ZAR ${fmtRate(spot)}${gbpZar ? ` · GBP/ZAR ${fmtRate(gbpZar)}` : ''}${eurZar ? ` · EUR/ZAR ${fmtRate(eurZar)}` : ''}</div>` : ''}
-        </td>
-      </tr>
-    </table>
-  </td></tr>
+<table width="680" cellpadding="0" cellspacing="0" border="0" style="max-width:680px;background-color:#ffffff;" bgcolor="#ffffff">
 
-  <!-- Body -->
-  <tr><td style="padding:24px 28px;">
+  <!-- ═══ HEADER ═══ -->
+  <tr bgcolor="${KUDA_TEAL}">
+    <td style="background-color:${KUDA_TEAL};padding:0;" bgcolor="${KUDA_TEAL}">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <!-- Kuda Green accent stripe -->
+          <td width="6" style="background-color:${KUDA_GREEN};font-size:1px;line-height:1px;" bgcolor="${KUDA_GREEN}">&nbsp;</td>
+          <td style="padding:18px 24px;background-color:${KUDA_TEAL};" bgcolor="${KUDA_TEAL}">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td>
+                  <p style="margin:0;font-size:24px;font-weight:bold;letter-spacing:0.08em;font-family:Arial,Helvetica,sans-serif;">
+                    <font color="${WHT}">KUDA </font><font color="${KUDA_SKY}" style="font-size:13px;font-weight:normal;letter-spacing:0.14em;">FOREIGN EXCHANGE</font>
+                  </p>
+                  <p style="margin:4px 0 0;font-size:10px;letter-spacing:0.06em;"><font color="${KUDA_SKY}">IN YOUR CORNER · FSP 46310</font></p>
+                </td>
+                <td align="right">
+                  <p style="margin:0;font-size:11px;"><font color="${KUDA_SKY}">Weekly FX Position Update</font></p>
+                  <p style="margin:3px 0 0;font-size:12px;font-weight:bold;"><font color="${WHT}">${weekStr}</font></p>
+                  ${spot ? `<p style="margin:4px 0 0;font-size:11px;"><font color="${KUDA_SKY}">USD/ZAR <b><font color="${WHT}">${fmtRate(spot)}</font></b>${gbpZar ? ` &nbsp;·&nbsp; GBP/ZAR <b><font color="${WHT}">${fmtRate(gbpZar)}</font></b>` : ''}${eurZar ? ` &nbsp;·&nbsp; EUR/ZAR <b><font color="${WHT}">${fmtRate(eurZar)}</font></b>` : ''}</font></p>` : ''}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- ═══ BODY ═══ -->
+  <tr bgcolor="#ffffff"><td style="padding:28px 28px 8px;background-color:#ffffff;" bgcolor="#ffffff">
 
     <!-- Greeting -->
-    <p style="margin:0 0 6px;font-size:14px;color:#1e293b;">Dear ${clientNames},</p>
-    <p style="margin:0 0 24px;font-size:13px;color:#475569;line-height:1.6;">
-      Please find your weekly FX position update below for the period ending <strong>${fmtDate(mtmDate || new Date().toISOString())}</strong>.
-      ${spot ? `USD/ZAR is currently trading at <strong>${fmtRate(spot)}</strong>.` : ''}
-    </p>
+    <p style="margin:0 0 6px;font-size:15px;"><font color="${TXT_DARK}">Dear <b>${clientNames},</b></font></p>
+    <p style="margin:0 0 22px;font-size:13px;line-height:1.6;"><font color="${TXT_MID}">Please find your weekly FX position update below, for the period ending <b><font color="${TXT_DARK}">${fmtDate(mtmDate || new Date().toISOString())}</font></b>.${spot ? ` USD/ZAR is currently trading at <b><font color="${KUDA_TEAL}">${fmtRate(spot)}</font></b>.` : ''}</font></p>
 
     <!-- Portfolio overview banner -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;border-radius:8px;margin-bottom:24px;">
-      <tr>
-        <td style="padding:14px 16px;border-right:1px solid #1e3a5f;text-align:center;">
-          <div style="font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Open Contracts</div>
-          <div style="font-size:20px;font-weight:800;color:#ffffff;">${totalTrades}</div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+      <tr bgcolor="${KUDA_NAVY}">
+        <td align="center" style="padding:14px 10px;border-right:1px solid #2E4A5F;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
+          <p style="margin:0 0 4px;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;"><font color="${KUDA_SKY}">Open Contracts</font></p>
+          <p style="margin:0;font-size:22px;font-weight:bold;"><font color="${WHT}"><b>${totalTrades}</b></font></p>
         </td>
-        <td style="padding:14px 16px;border-right:1px solid #1e3a5f;text-align:center;">
-          <div style="font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Total Nominal</div>
-          <div style="font-size:20px;font-weight:800;color:#ffffff;">${nomFmt(totalNominal)}</div>
+        <td align="center" style="padding:14px 10px;border-right:1px solid #2E4A5F;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
+          <p style="margin:0 0 4px;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;"><font color="${KUDA_SKY}">Total Nominal</font></p>
+          <p style="margin:0;font-size:22px;font-weight:bold;"><font color="${WHT}"><b>${nomFmt(totalNominal)}</b></font></p>
         </td>
-        <td style="padding:14px 16px;border-right:1px solid #1e3a5f;text-align:center;">
-          <div style="font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Mark-to-Market</div>
-          <div style="font-size:20px;font-weight:800;">${mtmFmt(totalMtm)}</div>
+        <td align="center" style="padding:14px 10px;border-right:1px solid #2E4A5F;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
+          <p style="margin:0 0 4px;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;"><font color="${KUDA_SKY}">Mark-to-Market</font></p>
+          <p style="margin:0;font-size:22px;font-weight:bold;">${mtmFmt(totalMtm)}</p>
         </td>
-        <td style="padding:14px 16px;text-align:center;">
-          <div style="font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Maturing ≤30 days</div>
-          <div style="font-size:20px;font-weight:800;color:${upcoming30.length>0?'#f59e0b':'#ffffff'};">${upcoming30.length}</div>
+        <td align="center" style="padding:14px 10px;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
+          <p style="margin:0 0 4px;font-size:9px;text-transform:uppercase;letter-spacing:0.07em;"><font color="${KUDA_SKY}">Maturing &le;30 days</font></p>
+          <p style="margin:0;font-size:22px;font-weight:bold;"><font color="${upcoming30.length > 0 ? '#FCD34D' : WHT}"><b>${upcoming30.length}</b></font></p>
         </td>
       </tr>
     </table>
@@ -343,32 +388,28 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
     ${facilityHtml}
 
     <!-- Sign-off -->
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;border-top:1px solid #e2e8f0;">
-      <tr><td style="padding:16px 0 0;">
-        <p style="margin:0 0 4px;font-size:13px;color:#475569;">Vriendelike groete / Kind regards,</p>
-        <p style="margin:0;font-size:13px;color:#1e293b;font-weight:700;">${senderName || 'CBC Kuda FX Dealing Desk'}</p>
-        <p style="margin:2px 0 0;font-size:11px;color:#64748b;">CBC Kuda Foreign Exchange (Pty) Ltd</p>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid ${KUDA_GREEN};">
+      <tr bgcolor="#ffffff"><td style="padding:18px 0 8px;background-color:#ffffff;" bgcolor="#ffffff">
+        <p style="margin:0 0 4px;font-size:13px;"><font color="${TXT_MID}">Vriendelike groete / Kind regards,</font></p>
+        <p style="margin:0 0 2px;font-size:14px;font-weight:bold;"><font color="${KUDA_TEAL}"><b>${senderName || 'CBC Kuda FX Dealing Desk'}</b></font></p>
+        <p style="margin:0;font-size:11px;"><font color="${TXT_LIGHT}">CBC Kuda Foreign Exchange (Pty) Ltd &nbsp;·&nbsp; FSP 46310</font></p>
       </td></tr>
     </table>
 
   </td></tr>
 
-  <!-- Footer -->
-  <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 28px;text-align:center;">
-    <p style="margin:0;font-size:10px;color:#94a3b8;">
-      CBC Kuda Foreign Exchange (Pty) Ltd · FSP 46310 ·
-      <a href="https://kuda.co.za/fx/" style="color:#00856a;">kuda.co.za/fx</a> ·
-      Facility FYN005836 · Investec Bank
-    </p>
-    <p style="margin:4px 0 0;font-size:10px;color:#94a3b8;">
-      This communication is confidential and intended solely for the named recipient.
-      Market commentary is for informational purposes only and does not constitute financial advice.
-    </p>
-  </td></tr>
+  <!-- ═══ FOOTER ═══ -->
+  <tr bgcolor="${KUDA_NAVY}">
+    <td align="center" style="padding:14px 28px;background-color:${KUDA_NAVY};" bgcolor="${KUDA_NAVY}">
+      <p style="margin:0 0 3px;font-size:10px;"><font color="${KUDA_SKY}">CBC Kuda Foreign Exchange (Pty) Ltd &nbsp;·&nbsp; FSP 46310 &nbsp;·&nbsp; Investec Bank Facility FYN005836</font></p>
+      <p style="margin:0;font-size:9px;"><font color="#475569">This communication is confidential and intended solely for the named recipient. Market commentary is for informational purposes only and does not constitute financial advice.</font></p>
+    </td>
+  </tr>
 
 </table>
 </td></tr>
 </table>
+
 </body></html>`
 }
 
@@ -450,7 +491,7 @@ export default function EmailComposer({ allClients, initialClient, meta, facilit
           <div className="flex items-center gap-3">
             <MailIcon size={16} className="text-kuda-teal" />
             <div>
-              <p className="text-sm font-semibold text-white">Weekly Client Mailer</p>
+              <p className="text-sm font-semibold text-white">Kuda FX · Weekly Client Mailer</p>
               <p className="text-xs text-slate-400">
                 {selectedClients.length ? selectedClients.map(c => c.name).join(' & ') : 'Select client entities below'}
               </p>
