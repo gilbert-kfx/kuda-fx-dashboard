@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   XIcon, CopyIcon, CheckIcon, MailIcon, RefreshCwIcon,
-  LoaderIcon, AlertCircleIcon, CheckCircleIcon, PlusIcon, TrashIcon,
+  LoaderIcon, AlertCircleIcon, CheckCircleIcon, ExternalLinkIcon,
 } from 'lucide-react'
 import { zarM, usdM, rate } from '../utils/formatters'
 
@@ -431,6 +431,16 @@ export default function EmailComposer({ allClients, initialClient, meta, facilit
     setTimeout(() => setCopied(false), 2500)
   }
 
+  // Opens a standalone rendered version in a new tab.
+  // User can then Ctrl+A → Ctrl+C → paste directly into Outlook / Gmail.
+  const openInNewTab = () => {
+    const blob = new Blob([html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    // Revoke after a short delay to give the browser time to open it
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/75 z-50 flex items-start justify-center overflow-y-auto py-6 px-3">
       <div className="w-full max-w-6xl bg-kuda-navylt rounded-2xl border border-kuda-border shadow-2xl">
@@ -611,18 +621,40 @@ export default function EmailComposer({ allClients, initialClient, meta, facilit
             </div>
 
             {/* Footer actions */}
-            <div className="px-5 py-4 border-t border-kuda-border flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[10px] text-slate-600 max-w-xs">
-                Copy HTML then paste into Outlook using <strong>Ctrl+Shift+V</strong> (Paste Special → HTML) to preserve formatting.
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="btn-ghost text-xs py-1.5 px-4">Cancel</button>
-                <button onClick={copyHtml}
-                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-2"
+            <div className="px-5 py-4 border-t border-kuda-border space-y-3">
+              {/* Send instructions */}
+              <div className="bg-kuda-navy rounded-lg border border-kuda-border px-4 py-3 space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">How to send</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400">
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-kuda-teal/20 text-kuda-teal text-[10px] font-bold flex items-center justify-center mt-0.5">1</span>
+                    <span><strong className="text-slate-300">Outlook / Apple Mail:</strong> Click <em>Open in browser</em>, then Ctrl+A → Ctrl+C, and paste into a new email (Ctrl+V). Formatting is preserved automatically.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-slate-600/40 text-slate-400 text-[10px] font-bold flex items-center justify-center mt-0.5">2</span>
+                    <span><strong className="text-slate-300">Gmail / Webmail:</strong> Use <em>Copy HTML</em>, then in Gmail compose click the three-dot menu → <em>Paste as HTML</em> (or use a browser extension like Stripo).</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button onClick={onClose} className="btn-ghost text-xs py-1.5 px-4">Close</button>
+                <button
+                  onClick={copyHtml}
                   disabled={!selectedClients.length}
+                  className="btn-ghost text-xs py-1.5 px-4 flex items-center gap-2 border border-kuda-border"
                 >
-                  {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+                  {copied ? <CheckIcon size={13} className="text-kuda-teal" /> : <CopyIcon size={13} />}
                   {copied ? 'Copied!' : 'Copy HTML'}
+                </button>
+                <button
+                  onClick={openInNewTab}
+                  disabled={!selectedClients.length}
+                  className="btn-primary text-xs py-1.5 px-4 flex items-center gap-2"
+                >
+                  <ExternalLinkIcon size={13} />
+                  Open in browser
                 </button>
               </div>
             </div>
