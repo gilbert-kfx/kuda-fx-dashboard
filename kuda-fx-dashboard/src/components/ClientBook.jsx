@@ -61,7 +61,7 @@ export default function ClientBook({ data, meta, facilityLimits }) {
     return clients
       .filter(c => !q || c.name.toLowerCase().includes(q))
       .sort((a, b) => {
-        if (sortKey === 'name') return a.name.localeCompare(b.name)
+        if (sortKey === 'name') return (a.name || '').localeCompare(b.name || '')
         return b[sortKey] - a[sortKey]
       })
   }, [clients, search, sortKey])
@@ -249,7 +249,7 @@ export default function ClientBook({ data, meta, facilityLimits }) {
                           {fmtNum(t.notional_fcy)}
                         </td>
                         <td className="px-3 py-2 text-right font-mono text-slate-300 whitespace-nowrap">
-                          {t.deal_rate.toFixed(4)}
+                          {t.deal_rate != null ? t.deal_rate.toFixed(4) : '—'}
                         </td>
                         <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDate(t.trade_date)}</td>
                         <td className={`px-3 py-2 whitespace-nowrap font-mono ${URGENCY(t.days_to_maturity)}`}>

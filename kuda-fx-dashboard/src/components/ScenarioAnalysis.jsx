@@ -111,7 +111,7 @@ export default function ScenarioAnalysis({ data }) {
                       hover:bg-kuda-navymid`}
                   >
                     <td className={`py-1.5 font-semibold ${isToday ? 'text-kuda-teal' : 'text-slate-300'}`}>
-                      {s.rate.toFixed(2)}
+                      {s.rate != null ? s.rate.toFixed(2) : '—'}
                       {isToday && <span className="text-kuda-teal ml-1 text-[10px]">●</span>}
                     </td>
                     <td className={`text-right py-1.5 ${s.est_mtm >= 0 ? 'text-kuda-teal' : 'text-red-400'}`}>
