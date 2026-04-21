@@ -276,34 +276,6 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
       </td></tr>
     </table>` : ''
 
-  // ── Facility summary ──────────────────────────────────────────────────────
-  const utilCol = !utilPct ? TXT_DARK : utilPct > 90 ? RED : utilPct > 75 ? AMBER : KUDA_GREEN
-  const facilityHtml = dealingCap ? `
-    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-      ${sectionTitle('Facility Summary')}
-      <tr><td style="padding:0 0 20px 0;" bgcolor="#ffffff">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${BRD_LIGHT};">
-          <tr>
-            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
-              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Open Nominal</font></p>
-              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${KUDA_TEAL}"><b>${nomFmt(totalNominal)}</b></font></p>
-            </td>
-            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
-              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Dealing Cap</font></p>
-              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${TXT_DARK}"><b>${nomFmt(dealingCap)}</b></font></p>
-            </td>
-            <td align="center" style="padding:14px 16px;border-right:1px solid ${BRD_LIGHT};background-color:#F8FAFC;" bgcolor="#F8FAFC">
-              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Utilisation</font></p>
-              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${utilCol}"><b>${utilPct ?? '—'}%</b></font></p>
-            </td>
-            <td align="center" style="padding:14px 16px;background-color:#F8FAFC;" bgcolor="#F8FAFC">
-              <p style="margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;"><font color="${TXT_LIGHT}">Headroom</font></p>
-              <p style="margin:0;font-size:20px;font-weight:bold;"><font color="${KUDA_GREEN}"><b>${nomFmt(dealingCap - totalNominal)}</b></font></p>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-    </table>` : ''
 
   // ── Build final HTML ──────────────────────────────────────────────────────
   const clientNames = clients.map(c => c.name).join(' & ')
@@ -385,7 +357,6 @@ function buildEmailHtml({ clients, commentary, openOrders, spot, gbpZar, eurZar,
     ${upcomingHtml}
     ${cfHtml}
     ${entitySections}
-    ${facilityHtml}
 
     <!-- Sign-off -->
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid ${KUDA_GREEN};">
