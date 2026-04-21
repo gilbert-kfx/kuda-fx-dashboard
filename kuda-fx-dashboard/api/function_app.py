@@ -9,7 +9,7 @@ import json
 import logging
 import io
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 import numpy as np
 
@@ -237,6 +237,172 @@ def today_options(req: func.HttpRequest) -> func.HttpResponse:
             "Access-Control-Allow-Headers": "Content-Type",
         },
     )
+
+
+@app.route(route="commentary", methods=["GET"])
+def commentary_endpoint(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Fetch weekly ZAR-focused market commentary from free RSS sources.
+    Results are cached in blob storage for 8 hours to avoid hammering external servers.
+    Sources tried in order: BusinessTech, Daily Maverick, Moneyweb, IOL Business, FXStreet.
+    Returns a list of articles filtered for ZAR/rand/forex relevance.
+    """
+    import urllib.request
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+
+    CACHE_BLOB  = "commentary-cache.json"
+    CACHE_HOURS = 8
+    CORS        = {"Access-Control-Allow-Origin": "*"}
+
+    ZAR_KEYWORDS = [
+        "rand", "zar", "south africa", "rsa", "sarb", "reserve bank",
+        "usdzar", "usd/zar", "eurzar", "eur/zar", "gbpzar",
+        "forex", "foreign exchange", "currency", "exchange rate",
+        "mpc", "monetary policy", "inflation", "repo rate",
+        "emerging market", "brics", "loadshedding", "load shedding",
+        "dollar", "treasury", "fed", "federal reserve",
+    ]
+
+    RSS_SOURCES = [
+        ("BusinessTech Forex",     "https://businesstech.co.za/news/category/forex/feed/",      "businesstech.co.za"),
+        ("Daily Maverick Biz",     "https://www.dailymaverick.co.za/section/business-maverick/feed/", "dailymaverick.co.za"),
+        ("Moneyweb",               "https://www.moneyweb.co.za/feed/",                           "moneyweb.co.za"),
+        ("IOL Business Report",    "https://www.iol.co.za/cmlink/rss-biz",                       "iol.co.za"),
+        ("FXStreet ZAR",           "https://www.fxstreet.com/rss/news",                          "fxstreet.com"),
+        ("BusinessLive Markets",   "https://www.businesslive.co.za/rss/markets/",                "businesslive.co.za"),
+    ]
+
+    def _clean(s):
+        """Strip HTML tags and collapse whitespace."""
+        import re
+        s = re.sub(r'<[^>]+>', ' ', s or '')
+        s = re.sub(r'&[a-z]+;', ' ', s)
+        return ' '.join(s.split())[:600]
+
+    def _is_zar_relevant(title, desc):
+        combined = (title + ' ' + desc).lower()
+        return any(kw in combined for kw in ZAR_KEYWORDS)
+
+    def _parse_rss(xml_bytes, source_label):
+        articles = []
+        try:
+            root = ET.fromstring(xml_bytes)
+            ns   = {'atom': 'http://www.w3.org/2005/Atom'}
+            # Handle both RSS 2.0 and Atom
+            items = root.findall('.//item') or root.findall('.//atom:entry', ns)
+            for item in items[:20]:  # limit per source
+                title = item.findtext('title') or item.findtext('atom:title', namespaces=ns) or ''
+                desc  = (item.findtext('description') or
+                         item.findtext('content') or
+                         item.findtext('atom:summary', namespaces=ns) or '')
+                link  = item.findtext('link') or item.findtext('atom:link', namespaces=ns) or ''
+                pub   = item.findtext('pubDate') or item.findtext('atom:published', namespaces=ns) or ''
+                title = _clean(title)
+                desc  = _clean(desc)
+                if title and _is_zar_relevant(title, desc):
+                    # Try to parse publish date
+                    pub_iso = ''
+                    try:
+                        pub_iso = parsedate_to_datetime(pub).isoformat()
+                    except Exception:
+                        pub_iso = pub[:20] if pub else ''
+                    articles.append({
+                        'title':   title,
+                        'summary': desc[:400],
+                        'source':  source_label,
+                        'link':    link.strip(),
+                        'pub':     pub_iso,
+                    })
+        except Exception as e:
+            logging.warning(f"RSS parse error from {source_label}: {e}")
+        return articles
+
+    def _fetch_rss(url, label):
+        try:
+            req_obj = urllib.request.Request(
+                url,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (compatible; KudaFX/1.0; +https://kuda.co.za)',
+                    'Accept':     'application/rss+xml, application/xml, text/xml, */*',
+                },
+            )
+            with urllib.request.urlopen(req_obj, timeout=8) as resp:
+                xml_bytes = resp.read()
+            logging.info(f"Commentary: fetched {label} ({len(xml_bytes)} bytes)")
+            return _parse_rss(xml_bytes, label)
+        except Exception as e:
+            logging.warning(f"Commentary: {label} failed — {e}")
+            return []
+
+    # ── Check cache ───────────────────────────────────────────────────────────
+    try:
+        bsvc = _get_blob_client()
+        if bsvc:
+            container = bsvc.get_container_client(HISTORY_CONTAINER)
+            try:
+                cached = json.loads(container.download_blob(CACHE_BLOB).readall())
+                cached_at = datetime.fromisoformat(cached.get('cached_at', '2000-01-01'))
+                age_hours = (datetime.utcnow() - cached_at).total_seconds() / 3600
+                if age_hours < CACHE_HOURS:
+                    logging.info(f"Commentary: serving from cache (age {age_hours:.1f}h)")
+                    return func.HttpResponse(
+                        json.dumps(cached), mimetype='application/json', headers=CORS
+                    )
+            except Exception:
+                pass  # cache miss or parse error — continue to fetch
+    except Exception:
+        pass
+
+    # ── Fetch from sources ────────────────────────────────────────────────────
+    all_articles = []
+    for label, url, domain in RSS_SOURCES:
+        articles = _fetch_rss(url, label)
+        all_articles.extend(articles)
+        if len(all_articles) >= 12:
+            break  # enough
+
+    # De-duplicate by title similarity, sort newest first
+    seen_titles = set()
+    unique = []
+    for a in all_articles:
+        key = a['title'][:60].lower()
+        if key not in seen_titles:
+            seen_titles.add(key)
+            unique.append(a)
+
+    unique.sort(key=lambda x: x.get('pub', ''), reverse=True)
+    final = unique[:10]  # top 10
+
+    result = {
+        'articles':   final,
+        'count':      len(final),
+        'cached_at':  datetime.utcnow().isoformat(),
+        'sources_tried': [label for label, _, _ in RSS_SOURCES],
+    }
+
+    # ── Save to cache ─────────────────────────────────────────────────────────
+    try:
+        if bsvc:
+            container = bsvc.get_container_client(HISTORY_CONTAINER)
+            container.get_blob_client(CACHE_BLOB).upload_blob(
+                json.dumps(result), overwrite=True
+            )
+    except Exception as e:
+        logging.warning(f"Commentary: cache save failed — {e}")
+
+    return func.HttpResponse(
+        json.dumps(result), mimetype='application/json', headers=CORS
+    )
+
+
+@app.route(route="commentary", methods=["OPTIONS"])
+def commentary_options(req: func.HttpRequest) -> func.HttpResponse:
+    return func.HttpResponse("", status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    })
 
 
 @app.route(route="patch-snapshot", methods=["GET"])
@@ -693,7 +859,9 @@ def _fetch_live_spot() -> tuple[float, float, float]:
             logging.warning(f"Rate source {label} failed: {e}")
         return None
 
-    # ── Source 1: jsDelivr CDN-hosted currency data (no auth, CDN-cached) ──
+    # ── Source 1: fawazahmed0 currency API — dated URL avoids CDN stale-cache ──
+    # @latest is an npm tag cached by jsDelivr and may lag by 24 h or more.
+    # Using today's (and yesterday's) date-stamped version ensures fresh data.
     def parse_jsdelivr(d):
         usd = d.get("usd", {})
         zar = float(usd.get("zar", 0))
@@ -701,11 +869,15 @@ def _fetch_live_spot() -> tuple[float, float, float]:
         eur_inv = float(usd.get("eur", 0))
         return zar, (1/gbp_inv if gbp_inv > 0 else 0), (1/eur_inv if eur_inv > 0 else 0)
 
-    r = _get(
-        "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
-        parse_jsdelivr, "jsdelivr"
-    )
-    if r: return r
+    today_str     = datetime.utcnow().strftime('%Y-%m-%d')
+    yesterday_str = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+
+    for date_tag in [today_str, yesterday_str]:
+        r = _get(
+            f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{date_tag}/v1/currencies/usd.json",
+            parse_jsdelivr, f"jsdelivr@{date_tag}"
+        )
+        if r: return r
 
     # ── Source 2: ExchangeRate-API (free tier, no key needed for latest) ──
     def parse_er_api(d):

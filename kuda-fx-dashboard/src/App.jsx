@@ -155,7 +155,7 @@ function Dashboard() {
               </p>
             </div>
           </div>
-          <ClientBook data={client_book} meta={meta} />
+          <ClientBook data={client_book} meta={meta} facilityLimits={facility_limits} />
         </main>
       )}
 

@@ -48,7 +48,7 @@ function UpcomingChip({ label, data, color }) {
   )
 }
 
-export default function ClientBook({ data, meta }) {
+export default function ClientBook({ data, meta, facilityLimits }) {
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState(null)
   const [composing, setComposing] = useState(false)
@@ -87,8 +87,10 @@ export default function ClientBook({ data, meta }) {
     <>
       {composing && active && (
         <EmailComposer
-          client={active}
+          allClients={clients}
+          initialClient={active}
           meta={meta}
+          facilityLimits={facilityLimits}
           onClose={() => setComposing(false)}
         />
       )}

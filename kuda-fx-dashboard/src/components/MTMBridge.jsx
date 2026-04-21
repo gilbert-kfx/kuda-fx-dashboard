@@ -3,6 +3,7 @@ import { zarM, rate } from '../utils/formatters'
 import {
   TrendingUpIcon, TrendingDownIcon, MinusIcon,
   CircleDotIcon, CheckCircleIcon, PlusCircleIcon,
+  AlertTriangleIcon,
 } from 'lucide-react'
 
 const CSA_THRESHOLD = -15_000_000
@@ -137,6 +138,22 @@ export default function MTMBridge({ data }) {
             </div>
           ) : (
             <div className="space-y-1">
+
+              {/* Stale-rate warning — fires when prev & current rate are identical (CDN caching) */}
+              {prev_rate != null && current_rate != null &&
+               Math.abs(prev_rate - current_rate) < 0.0005 && (
+                <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/25
+                                rounded-lg px-3 py-2.5 mb-3 text-xs text-amber-300">
+                  <AlertTriangleIcon size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    Yesterday's stored rate ({rate(prev_rate)}) and today's rate ({rate(current_rate)}) are
+                    identical — this is likely a stale cached rate from the previous upload rather than
+                    a genuine flat market. The attribution below will show almost nothing in "Spot rate
+                    movement" and dump everything into "New deals & repricing." Re-upload today's file
+                    to refresh the rate, or use the patch endpoint to correct yesterday's snapshot.
+                  </span>
+                </div>
+              )}
 
               <AttributionRow
                 icon={<CircleDotIcon size={14} className="text-indigo-400" />}
