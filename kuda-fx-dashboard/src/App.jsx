@@ -191,7 +191,7 @@ function Dashboard() {
 
       {/* Footer */}
       <footer className="border-t border-kuda-border mt-8 py-4 px-6 text-center text-xs text-slate-600">
-        CBC Kuda Foreign Exchange (Pty) Ltd · FX Facility Management · Investec Bank FYN005836 ·
+        CBC Kuda Foreign Exchange (Pty) Ltd · FX Facility Management · Investec Bank FYN006559 ·
         Data sourced from FXFlow · Generated {new Date(meta.generated_at).toLocaleString('en-ZA')}
       </footer>
     </div>

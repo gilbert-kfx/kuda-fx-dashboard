@@ -18,7 +18,7 @@ export default function FacilityLimits({ data }) {
 
   return (
     <section>
-      <h2 className="section-title">1 · Facility Limits — FYN005836</h2>
+      <h2 className="section-title">1 · Facility Limits — FYN006559</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 
         {/* Dealing Cap */}

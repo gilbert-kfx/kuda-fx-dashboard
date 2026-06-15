@@ -27,7 +27,7 @@ export default function Header({ meta, onReset }) {
               <span className="font-semibold text-kuda-skyblue ml-2" style={{ fontSize: '11px', letterSpacing: '0.14em' }}>FOREIGN EXCHANGE</span>
             </div>
             <div className="text-kuda-skyblue leading-none mt-1" style={{ fontSize: '9px', letterSpacing: '0.1em', opacity: 0.65 }}>
-              FX FACILITY MANAGEMENT · FYN005836
+              FX FACILITY MANAGEMENT · FYN006559
             </div>
           </div>
         </div>

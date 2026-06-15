@@ -55,7 +55,7 @@ export default function UploadPanel({ onData }) {
           <span className="text-kuda-teal font-bold text-2xl">K</span>
         </div>
         <h1 className="text-2xl font-semibold text-white">CBC Kuda FX · Risk Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-1">Facility FYN005836 · Investec Bank</p>
+        <p className="text-slate-400 text-sm mt-1">Facility FYN006559 · Investec Bank</p>
       </div>
 
       <div className="w-full max-w-xl space-y-5">

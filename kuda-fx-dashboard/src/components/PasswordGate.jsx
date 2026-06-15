@@ -59,7 +59,7 @@ export default function PasswordGate({ children }) {
           <h1 className="text-xl font-semibold text-white" style={{ fontFamily: "'Raleway', Arial, sans-serif", letterSpacing: '0.04em' }}>
             KUDA <span className="text-kuda-skyblue font-normal text-base">FOREIGN EXCHANGE</span>
           </h1>
-          <p className="text-slate-400 text-sm mt-1">FX Facility Management · FYN005836</p>
+          <p className="text-slate-400 text-sm mt-1">FX Facility Management · FYN006559</p>
         </div>
 
         {/* Password form */}

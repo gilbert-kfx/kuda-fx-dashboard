@@ -26,13 +26,14 @@ HISTORY_CONTAINER  = "fx-history"
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-FACILITY_DEALING_CAP_USD   = 24_000_000
-FACILITY_PFE_LIMIT_ZAR     = 35_000_000
-FACILITY_SETTLEMENT_LIMIT  = 5_000_000   # USD per settlement date
-FACILITY_MAX_TENOR_DAYS    = 366
+# Facility Notice FYN006559 — dated 06 May 2026
+FACILITY_DEALING_CAP_USD   = 53_000_000   # USD nominal dealing facility
+FACILITY_PFE_LIMIT_ZAR     = 62_000_000   # Potential Future Exposure limit (ZAR)
+FACILITY_SETTLEMENT_LIMIT  = 7_000_000    # USD per settlement date
+FACILITY_MAX_TENOR_DAYS    = 366          # 12 months
 CSA_THRESHOLD_ZAR          = -15_000_000  # Kuda threshold (negative = Investec calls collateral)
 CSA_MIN_TRANSFER_ZAR       = 500_000
-SCENARIO_RATES             = [13, 14, 15, 16, 17, 17.5, 18, 18.5, 18.65, 19, 19.5, 20]
+SCENARIO_RATES             = [11, 12, 13, 14, 15, 16, 17, 17.5, 18, 18.5, 18.65, 19, 19.5, 20]
 
 
 # ─── HTTP Trigger ──────────────────────────────────────────────────────────────
@@ -958,38 +959,45 @@ def _derive_rates(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float)
 
 def _compute_sensitivity(df: pd.DataFrame, spot_usd_zar: float, gbp_usd: float, eur_usd: float) -> float:
     """
-    Compute dMTM_kuda/d(USD_ZAR_spot) in ZAR per 1 USD/ZAR point.
-    For USD/ZAR forwards: sensitivity_i = NOMINAL_USD_i (signed, Kuda perspective)
-    For GBP/ZAR and EUR/ZAR forwards: sensitivity converted via cross rates.
-    Sign: negative means MTM worsens as USD/ZAR rises (net long FCY book).
+    Compute the net USD-equivalent book sensitivity: sum of all signed NOMINAL_USD across
+    every row in the file (FORWARD, DRAWDOWN, EXTENSION, Vanilla, Forward Enhancer,
+    AND CANCELLATION).
+
+    FXFlow behaviour (confirmed from live data):
+      - When a trade is PARTIALLY cancelled: the original FORWARD row is kept at its full
+        original notional, and a CANCELLATION row is added for the cancelled portion.
+        Example — Manna Commodity Trading: $80k FORWARD (Import Buy, −80k nominal) +
+        $40k CANCELLATION (Import Sell, +40k nominal) → net remaining exposure = −40k ✓
+      - When a trade is FULLY cancelled: same pattern — FORWARD stays at full notional,
+        matching CANCELLATION offsets it entirely → net = 0 ✓
+
+    Therefore CANCELLATION rows MUST be included in the sensitivity sum so that they
+    correctly reduce (or eliminate) the notional of their paired FORWARD rows.
+
+    Excluding cancellations would overstate exposure (e.g. counting $80k for Manna when
+    only $40k remains open), producing an incorrect sensitivity and trigger rate.
+
+    The resulting net sensitivity for a well-hedged or balanced book is naturally small.
+    _calc_csa_monitor handles near-zero sensitivity with a MIN_SENS_USD guard.
     """
-    # NOMINAL_USD is already signed from Kuda's perspective in the Excel file:
-    # positive = Kuda long FCY, negative = Kuda short FCY
-    # Sum = net USD-equivalent FCY exposure
-    # dMTM_ZAR/d(USD_ZAR) = net_FCY_notional_USD (in USD)
-    # (1 USD × 1 ZAR/USD = 1 ZAR P&L per unit rate move per unit notional)
-
-    fec_df = df[df.get("PRODUCT_TYPE", df.get("PRODUCT", "")).isin(
-        ["FORWARD", "DRAWDOWN", "EXTENSION", "Currency", "CANCELLATION"]
-    )] if "PRODUCT_TYPE" in df.columns else df
-
-    sensitivity = float(fec_df["NOMINAL_USD"].sum())
+    sensitivity = float(df["NOMINAL_USD"].sum())
     return sensitivity
 
 
 def _scenario_mtm(current_mtm_kuda: float, sensitivity: float, current_rate: float, scenario_rate: float) -> float:
     """
-    Linear MTM approximation: MTM_scenario = MTM_today + sensitivity × (scenario_rate - current_rate)
-    sensitivity is the sum of signed NOMINAL_USD (positive = long FCY).
-    As rate rises and Kuda is net long FCY (sensitivity > 0), MTM improves...
+    Linear MTM approximation for a given scenario rate.
 
-    However, the PDF shows MTM worsens as rate rises for this book.
-    This is because the sensitivity from the Kuda forward perspective is:
-      dMTM/dSpot = -(net_FCY_notional)
-    The exporters sold FCY forward at FIXED rates; as spot rises, those fixed rates
-    (now below spot) reduce the in-the-money value of Kuda's buy positions.
+    sensitivity = net NOMINAL_USD across all rows (signed; positive = Kuda net long FCY,
+    negative = Kuda net short FCY).
 
-    We therefore negate the sensitivity for the scenario calculation:
+    Sign convention:
+      dMTM_ZAR / d(USD/ZAR) = -sensitivity
+      i.e. if sensitivity > 0 (net long FCY), MTM falls as USD/ZAR rises (ZAR weakens).
+           if sensitivity < 0 (net short FCY), MTM rises as USD/ZAR rises.
+
+    For a nearly-balanced book (|sensitivity| << notional), the MTM is approximately flat
+    across all rate scenarios, which is the correct result.
     """
     return current_mtm_kuda + (-sensitivity) * (scenario_rate - current_rate)
 
@@ -1119,10 +1127,13 @@ def _calc_csa_monitor(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: fl
     # current_mtm + sensitivity_effective × (trigger - spot) = -15M
     # sensitivity_effective = -sensitivity (see _scenario_mtm)
     eff_sens = -sensitivity
-    if abs(eff_sens) > 0:
-        trigger_rate = spot + (CSA_THRESHOLD_ZAR - current_mtm_kuda) / eff_sens
+    MIN_SENS_USD = 500_000   # below this the book is so flat the trigger is not meaningful
+    if abs(eff_sens) >= MIN_SENS_USD:
+        raw_trigger = spot + (CSA_THRESHOLD_ZAR - current_mtm_kuda) / eff_sens
+        # Sanity guard: trigger must be a realistic USD/ZAR rate (1 – 50)
+        trigger_rate = raw_trigger if 1 < raw_trigger < 50 else None
     else:
-        trigger_rate = None
+        trigger_rate = None   # book too flat — sensitivity too low to give meaningful trigger
 
     pct_threshold_remaining = round((buffer_zar / abs(CSA_THRESHOLD_ZAR)) * 100, 1)
 
