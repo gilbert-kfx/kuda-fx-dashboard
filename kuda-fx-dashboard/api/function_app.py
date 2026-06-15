@@ -1038,7 +1038,10 @@ def _calc_facility_limits(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd
         long_nominal_fec = float(df.loc[fec_mask & (df["NOMINAL_USD"] > 0), "NOMINAL_USD"].sum())
         long_nominal_opt = float(df.loc[opt_mask & (df["NOMINAL_USD"] > 0), "NOMINAL_USD"].sum())
         long_nominal_usd  = long_nominal_fec + long_nominal_opt
-        gross_nominal_usd = float(df["NOMINAL_USD"].abs().sum())
+        # Gross = sum of absolute active nominals (FORWARD/DRAWDOWN/EXTENSION + Options only).
+        # Cancellations are excluded so they don't inflate the gross by double-counting
+        # both the original FORWARD and its CANCELLATION row.
+        gross_nominal_usd = float(df.loc[fec_mask | opt_mask, "NOMINAL_USD"].abs().sum())
         net_nominal_usd   = float(df["NOMINAL_USD"].sum())
 
     # Facility cap — prefer from summary, else use constant

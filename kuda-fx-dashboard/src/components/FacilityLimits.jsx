@@ -24,7 +24,7 @@ export default function FacilityLimits({ data }) {
         {/* Dealing Cap */}
         <LimitCard
           title="Dealing Cap"
-          subtitle="USD 24M nominal"
+          subtitle="USD 53M nominal"
           used={long_nominal_usd}
           limit={dealing_cap_usd}
           utilPct={nominal_utilisation_pct}
@@ -37,7 +37,7 @@ export default function FacilityLimits({ data }) {
         {/* PFE */}
         <LimitCard
           title="PFE Limit"
-          subtitle="ZAR 35M potential future exposure"
+          subtitle="ZAR 62M potential future exposure"
           used={pfe_exposure_zar}
           limit={pfe_limit_zar}
           utilPct={pfe_utilisation_pct}
@@ -50,7 +50,7 @@ export default function FacilityLimits({ data }) {
         {/* Settlement */}
         <LimitCard
           title="Settlement Limit"
-          subtitle="USD 5M per settlement date"
+          subtitle="USD 7M per settlement date"
           used={max_settlement_usd}
           limit={settlement_limit_usd}
           utilPct={(max_settlement_usd / settlement_limit_usd) * 100}
