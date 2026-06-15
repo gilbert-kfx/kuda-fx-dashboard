@@ -4,6 +4,7 @@ import Header             from './components/Header.jsx'
 import UploadPanel        from './components/UploadPanel.jsx'
 import FacilityLimits     from './components/FacilityLimits.jsx'
 import CSAMonitor         from './components/CSAMonitor.jsx'
+import BookSplit          from './components/BookSplit.jsx'
 import MTMBridge          from './components/MTMBridge.jsx'
 import ScenarioAnalysis   from './components/ScenarioAnalysis.jsx'
 import TopClientsTable    from './components/TopClientsTable.jsx'
@@ -108,7 +109,7 @@ function Dashboard() {
   }
 
   const {
-    meta, facility_limits, csa_monitor, mtm_bridge,
+    meta, facility_limits, csa_monitor, book_split, mtm_bridge,
     scenario_analysis, top_clients, maturity_profile,
     facility_projection, settled_today, client_book,
   } = dashData
@@ -160,6 +161,7 @@ function Dashboard() {
         <main className="max-w-screen-2xl mx-auto px-4 md:px-6 py-6 space-y-8">
           <FacilityLimits    data={facility_limits}    />
           <CSAMonitor        data={csa_monitor}         />
+          <BookSplit         data={book_split}          />
           <MTMBridge         data={mtm_bridge}          />
           <ScenarioAnalysis  data={scenario_analysis}   />
           <TopClientsTable   data={top_clients}         />

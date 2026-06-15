@@ -118,6 +118,7 @@ def process(req: func.HttpRequest) -> func.HttpResponse:
             },
             "facility_limits":    fac_limits,
             "csa_monitor":        _calc_csa_monitor(df, spot_usd_zar, gbp_usd, eur_usd),
+            "book_split":         _calc_book_split(df, spot_usd_zar, gbp_usd, eur_usd),
             "mtm_bridge":         _calc_mtm_bridge(df, prev_mtm_zar, prev_rate, spot_usd_zar, gbp_usd, eur_usd),
             "scenario_analysis":  _calc_scenario_analysis(df, spot_usd_zar, gbp_usd, eur_usd),
             "top_clients":        _calc_top_clients(df, spot_usd_zar, gbp_usd, eur_usd),
@@ -1321,6 +1322,116 @@ def _calc_top_clients(
         "display_rates": [str(r) for r in display_rates],
         "clients":       rows,
         "current_rate":  round(spot, 4),
+    }
+
+
+def _calc_book_split(df: pd.DataFrame, spot: float, gbp_usd: float, eur_usd: float) -> dict:
+    """Section 3: Import vs Export book balance with tenor/maturity split.
+
+    Uses the IMPORT_EXPORT column from FXFlow (already parsed in _load_excel).
+    Returns per-book stats (gross/net nominal, MTM, avg rate, tenor distribution)
+    and a balance indicator showing how close the two books are.
+    """
+    if "IMPORT_EXPORT" not in df.columns:
+        return None
+
+    ie     = df["IMPORT_EXPORT"].fillna("").str.strip()
+    pt_col = "PRODUCT_TYPE" if "PRODUCT_TYPE" in df.columns else "PRODUCT"
+    pt     = df[pt_col].str.strip()
+
+    ACTIVE_TYPES = ["FORWARD", "DRAWDOWN", "EXTENSION", "Vanilla", "Forward Enhancer"]
+    FEC_TYPES    = ["FORWARD", "DRAWDOWN", "EXTENSION"]
+
+    today = pd.Timestamp.today().normalize()
+
+    # Tenor buckets (days, upper bound exclusive)
+    BUCKETS = [
+        ("0–30d",   0,   30),
+        ("1–3M",   30,   90),
+        ("3–6M",   90,  180),
+        ("6–9M",  180,  270),
+        ("9–12M", 270,  366),
+        (">12M",  366, 9999),
+    ]
+
+    def book_stats(book_type: str) -> dict:
+        mask      = ie.str.lower() == book_type.lower()
+        active_df = df[mask & pt.isin(ACTIVE_TYPES)].copy()
+        all_rows  = df[mask]
+
+        gross_nominal = float(active_df["NOMINAL_USD"].abs().sum())
+        net_nominal   = float(all_rows["NOMINAL_USD"].sum())   # incl. cancellations
+        mtm_zar       = float(all_rows["MTM_ZAR"].sum())
+        trade_count   = len(active_df)
+
+        # Weighted-average deal rate across FECs (by FCY notional)
+        wa_rate = None
+        if len(active_df) > 0:
+            fec_df = active_df[pt.loc[active_df.index].isin(FEC_TYPES)]
+            if len(fec_df) > 0 and "DEAL_RATE" in fec_df.columns and "NOTIONAL_FCY" in fec_df.columns:
+                w       = fec_df["NOTIONAL_FCY"].abs()
+                total_w = float(w.sum())
+                if total_w > 0:
+                    wa_rate = float((fec_df["DEAL_RATE"] * w).sum() / total_w)
+
+        # Tenor distribution (active trades with a maturity date)
+        mat_df = active_df[active_df["MATURITY_DATE"].notna()].copy()
+        if len(mat_df) > 0:
+            mat_df["TENOR_DAYS"] = (mat_df["MATURITY_DATE"] - today).dt.days.clip(lower=0)
+            notional_w  = mat_df["NOMINAL_USD"].abs()
+            total_w     = float(notional_w.sum())
+            avg_tenor   = float((mat_df["TENOR_DAYS"] * notional_w).sum() / total_w) if total_w > 0 else None
+        else:
+            avg_tenor = None
+
+        tenor_buckets = []
+        for label, lo, hi in BUCKETS:
+            if len(mat_df) > 0:
+                b = mat_df[(mat_df["TENOR_DAYS"] >= lo) & (mat_df["TENOR_DAYS"] < hi)]
+                tenor_buckets.append({
+                    "label":       label,
+                    "count":       len(b),
+                    "nominal_usd": round(float(b["NOMINAL_USD"].abs().sum())),
+                })
+            else:
+                tenor_buckets.append({"label": label, "count": 0, "nominal_usd": 0})
+
+        # Currency pair breakdown (active trades)
+        ccy_breakdown = []
+        if "CCY_PAIR" in active_df.columns and len(active_df) > 0:
+            grp = (active_df.groupby("CCY_PAIR")["NOMINAL_USD"]
+                   .apply(lambda x: float(x.abs().sum()))
+                   .sort_values(ascending=False))
+            for ccy, notional in grp.items():
+                if notional > 0:
+                    ccy_breakdown.append({"ccy": ccy, "nominal_usd": round(notional)})
+
+        return {
+            "trade_count":       trade_count,
+            "gross_nominal_usd": round(gross_nominal),
+            "net_nominal_usd":   round(net_nominal),
+            "mtm_zar":           round(mtm_zar),
+            "avg_deal_rate":     round(wa_rate, 4) if wa_rate is not None else None,
+            "avg_tenor_days":    round(avg_tenor) if avg_tenor is not None else None,
+            "tenor_buckets":     tenor_buckets,
+            "ccy_breakdown":     ccy_breakdown[:6],
+        }
+
+    imp = book_stats("Import")
+    exp = book_stats("Export")
+
+    total_gross = imp["gross_nominal_usd"] + exp["gross_nominal_usd"]
+    import_pct  = round(imp["gross_nominal_usd"] / total_gross * 100, 1) if total_gross > 0 else 50.0
+    export_pct  = round(100.0 - import_pct, 1)
+
+    return {
+        "import":           imp,
+        "export":           exp,
+        "net_position_usd": round(imp["net_nominal_usd"] + exp["net_nominal_usd"]),
+        "total_gross_usd":  round(total_gross),
+        "import_pct":       import_pct,
+        "export_pct":       export_pct,
+        "total_mtm_zar":    round(imp["mtm_zar"] + exp["mtm_zar"]),
     }
 
 
